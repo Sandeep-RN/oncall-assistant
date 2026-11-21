@@ -4,10 +4,14 @@
 # The base is pinned by DIGEST (the multi-arch index, not one platform), so a
 # rebuild cannot silently pick up a different image under the same tag. The tag
 # is kept in front of the digest so a human can read what it is. Looked up
-# 2026-11-22 with `docker buildx imagetools inspect python:3.15-slim`. A digest
+# 2026-11-22 with `docker buildx imagetools inspect python:3.14-slim`. A digest
 # never updates itself: bump it deliberately (or with Dependabot's docker
 # ecosystem) and let the Trivy gate in CI judge the new base.
-FROM python:3.15-slim@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928
+#
+# Python 3.14, not 3.15 like the link shortener: ONNX Runtime publishes no
+# cp315 wheels yet (docs/adr/0001). Keep in step with python-version in
+# ci.yml and target-version in pyproject.toml; move all three together.
+FROM python:3.14-slim@sha256:9aaa474097d094040649f2162a627c0049b408f52138d980916788d80f04802f
 
 # Links the GHCR package to this repository (permissions, "Connected to repo").
 LABEL org.opencontainers.image.source="https://github.com/Sandeep-RN/oncall-assistant"
@@ -35,10 +39,17 @@ RUN pip install -r requirements.txt && pip uninstall -y pip
 
 COPY app ./app
 
-# TODO(#4): the embedding model files (ONNX) are built into the image here, in
-# their own layer before `COPY app`, so a code change does not re-copy them.
-# Nothing is downloaded at runtime (ADR 0025: the app has 384Mi and a fixed
-# egress story). Add the step when #4 lands the model and its loader.
+# The embedding model (about 130 MB) is baked into the image: nothing is
+# downloaded at runtime (docs/adr/0001, ADR 0025). The script fetches a pinned
+# Hugging Face revision and refuses any file whose sha256 differs, so a
+# tampered download fails the build. It runs after pip is gone because it only
+# needs the standard library plus numpy (imported by app.embed.model). The files
+# land in /srv/models/..., where the loader looks by default (cwd is /srv).
+# Trade-off: this layer is rebuilt when app/ changes, so each such build
+# downloads the model again (a few seconds on a runner). Splitting it into its
+# own stage would cache it, at the price of listing the files download.py
+# imports; not worth it at this size.
+RUN python -m app.embed.download
 
 # Non-root with a numeric UID, so Kubernetes runAsNonRoot can verify it.
 RUN useradd --uid 10001 --no-create-home --shell /usr/sbin/nologin appuser
