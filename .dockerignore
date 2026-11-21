@@ -1,0 +1,21 @@
+# Keep the build context small and keep local-only files out of the image.
+# Only requirements.txt and app/ are copied today; this is a second line of
+# defence so a future `COPY . .` cannot leak any of these.
+.git
+.github
+.venv
+venv
+.pytest_cache
+.ruff_cache
+__pycache__
+*.py[cod]
+tests
+docs
+data
+.env
+.env.*
+*.pem
+*.key
+kubeconfig*
+*.kubeconfig
+*.md

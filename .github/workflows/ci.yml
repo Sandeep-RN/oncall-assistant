@@ -5,15 +5,88 @@ on:
   push:
     branches: [main]
 
-# Least privilege by default; later jobs (image, issue #7) raise only what they need.
+# Least privilege by default; the image job raises only what it needs.
 permissions:
   contents: read
 
 concurrency:
   group: ci-${{ github.ref }}
+  # Cancel superseded PR runs only. On main, every run must finish so its
+  # image and tag bump are not cut off halfway.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+env:
+  # Where the tag bump lands (ADR 0009 in the platform repo). One definition,
+  # used by both the `changes` and the `bump-gitops` job so they cannot drift.
+  GITOPS_REPO: Sandeep-RN/oci-k8s-gitops-demo-gitops
+  # TODO(demo #195): confirm this path when the gitops manifests are written.
+  # Until the file exists the bump job skips with a notice instead of failing.
+  KUSTOMIZATION: apps/oncall-assistant/base/kustomization.yaml
+
 jobs:
+  # Decides whether the image is worth building and deploying. A docs-only
+  # merge must not rebuild the image, push a new tag and restart the pod
+  # (Recreate strategy: a restart is a gap in service).
+  # Fails safe: any doubt (new branch, force push, a git error, the deployed
+  # tag unreadable) means "build".
+  changes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      image: ${{ steps.diff.outputs.image }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_PR: ${{ github.event.pull_request.base.sha }}
+          BASE_PUSH: ${{ github.event.before }}
+          # The gitops repo is public, so the default token can read it.
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          base="$BASE_PUSH"
+          [ "$EVENT" = "pull_request" ] && base="$BASE_PR"
+          if [ "$EVENT" = "push" ]; then
+            # On main, compare with the commit that is deployed (the image tag
+            # in the gitops repo), not with the previous push. GitHub keeps one
+            # pending run per concurrency group and drops the middle one when
+            # three merges arrive quickly; if the last merge is docs-only, a
+            # previous-push diff would skip the build and the dropped code
+            # change would never ship. A stale answer (bump PR not merged yet)
+            # only makes us build more, never less.
+            image_name="ghcr.io/${GITHUB_REPOSITORY,,}"
+            deployed="$(gh api -H 'Accept: application/vnd.github.raw' \
+              "repos/${GITOPS_REPO}/contents/${KUSTOMIZATION}" 2>/dev/null |
+              IMAGE="$image_name" yq '.images[] | select(.name == strenv(IMAGE)) | .newTag' 2>/dev/null)" || deployed=""
+            if printf '%s' "$deployed" | grep -Eq '^[0-9a-f]{40}$'; then
+              echo "comparing with the deployed commit ${deployed}"
+              base="$deployed"
+            else
+              echo "cannot read the deployed tag; building to be safe"
+              echo "image=true" >> "$GITHUB_OUTPUT"; exit 0
+            fi
+          fi
+          # What goes into the image: the code, its pinned requirements, the
+          # Dockerfile and this workflow (build, scan and bump are part of the
+          # pipeline). TODO(#4): add the model files' source once it exists.
+          pattern='^(app/|requirements\.txt$|Dockerfile$|\.dockerignore$|\.github/workflows/ci\.yml$)'
+          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ] \
+             || ! files="$(git diff --name-only "$base" "$GITHUB_SHA" 2>/dev/null)"; then
+            echo "cannot compute the diff; building to be safe"
+            echo "image=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          printf 'changed files:\n%s\n' "$files"
+          if printf '%s\n' "$files" | grep -Eq "$pattern"; then
+            echo "image=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "no image-relevant changes; skipping image and bump"
+            echo "image=false" >> "$GITHUB_OUTPUT"
+          fi
+
   test:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -62,3 +135,200 @@ jobs:
           set -o pipefail
           pytest -q -rs | tee pytest.log
           if grep -q "SKIPPED" pytest.log; then echo "tests were skipped in CI"; exit 1; fi
+
+  image:
+    needs: [test, changes]
+    if: needs.changes.outputs.image == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write # push to GHCR (main only; the login and push are skipped on PRs)
+    env:
+      REGISTRY: ghcr.io
+    outputs:
+      image: ${{ steps.image.outputs.image }}
+      size: ${{ steps.size.outputs.size }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # GHCR requires a lowercase repository path; github.repository may not be.
+      - name: Compute image name
+        id: image
+        run: |
+          image="${REGISTRY}/${GITHUB_REPOSITORY,,}"
+          echo "IMAGE=${image}" >> "$GITHUB_ENV"
+          echo "image=${image}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # Build one local amd64 image and scan it BEFORE anything is pushed, so a
+      # vulnerable image never reaches the registry (and so never gets deployed).
+      - name: Build image for scanning
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          load: true
+          tags: scan:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Trivy scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: scan:${{ github.sha }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true # fail only on vulnerabilities that have a fix
+          exit-code: "1"
+
+      # The node's boot disk is shared with the platform and the link shortener
+      # (demo #193), so the size is recorded on every build: in the job summary
+      # here and in the tag-bump pull request. This is the UNPACKED amd64 size
+      # of the scanned image; the arm64 image differs a little (native wheels),
+      # but the model files, which dominate once #4 lands, are the same.
+      - name: Record image size
+        id: size
+        run: |
+          bytes="$(docker image inspect "scan:${GITHUB_SHA}" --format '{{.Size}}')"
+          mb="$(( bytes / 1024 / 1024 ))"
+          echo "size=${mb} MiB" >> "$GITHUB_OUTPUT"
+          echo "Image size (amd64, unpacked): ${mb} MiB" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # The image starts and /healthz answers. A non-default port proves the
+      # port comes from UVICORN_PORT. No database: /healthz must not need one.
+      - name: Container smoke test
+        run: |
+          docker run -d --name smoke -e UVICORN_PORT=8080 -p 127.0.0.1:8080:8080 "scan:${GITHUB_SHA}"
+          trap 'docker rm -f smoke >/dev/null' EXIT
+          fail() { echo "::error::$1"; docker logs smoke; exit 1; }
+          up=false
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8080/healthz; then echo; up=true; break; fi
+            sleep 1
+          done
+          [ "$up" = true ] || fail "/healthz did not answer on port 8080 within 30 s"
+
+      - name: Log in to GHCR
+        if: github.event_name == 'push'
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Multi-arch. On PRs it builds both platforms without pushing, proving the
+      # arm64 build works. On main it pushes the immutable SHA tag (never reused).
+      - name: Build multi-arch image (push on main only)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name == 'push' }}
+          tags: ${{ env.IMAGE }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ADR 0009: open a PR in the gitops repo that sets the new image tag, with
+  # auto-merge on. It merges only after the gitops repo's required `validate`
+  # check passes; ArgoCD then syncs. CI never talks to a cluster.
+  bump-gitops:
+    needs: image
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions: {} # everything below uses GITOPS_TOKEN, not GITHUB_TOKEN
+    # One bump at a time, never cancelled, so two quick merges cannot race.
+    concurrency:
+      group: bump-gitops
+      cancel-in-progress: false
+    env:
+      IMAGE: ${{ needs.image.outputs.image }}
+      SIZE: ${{ needs.image.outputs.size }}
+      TAG: ${{ github.sha }}
+      # Fine-grained PAT limited to the gitops repo: contents + pull requests
+      # write. Expires 2027-02-20; rotate it before then (audit C9 tracks
+      # replacing it with a GitHub App token).
+      GH_TOKEN: ${{ secrets.GITOPS_TOKEN }}
+    steps:
+      # A missing or expired token fails here, loudly (401/403/404 from checkout).
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ env.GITOPS_REPO }}
+          token: ${{ secrets.GITOPS_TOKEN }}
+          path: gitops
+
+      # The gitops manifests (demo #195) do not exist until after the first
+      # image does. A missing FILE is therefore a clean skip with a notice; a
+      # file that exists without our image in it is a real misconfiguration and
+      # fails in the next step. Auth errors never reach this point (checkout).
+      - name: Locate the kustomization
+        id: target
+        run: |
+          if [ -f "gitops/${KUSTOMIZATION}" ]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::${KUSTOMIZATION} does not exist in ${GITOPS_REPO} yet (demo #195); skipping the tag bump."
+          fi
+
+      - name: Set image tag
+        id: bump
+        if: steps.target.outputs.found == 'true'
+        working-directory: gitops
+        run: |
+          set -euo pipefail
+          # yq is preinstalled on GitHub's Ubuntu runners. Matching on the image
+          # name (not a line number) keeps this correct if the file is reordered.
+          yq -i '(.images[] | select(.name == strenv(IMAGE))) |= (.newTag = strenv(TAG) | .newTag line_comment = "")' "$KUSTOMIZATION"
+          grep -q "newTag: ${TAG}" "$KUSTOMIZATION" || { echo "image ${IMAGE} not found in ${KUSTOMIZATION}"; exit 1; }
+          if git diff --quiet; then
+            echo "Tag already ${TAG}; nothing to do (re-run?)."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open auto-merging PR and close superseded ones
+        if: steps.bump.outputs.changed == 'true'
+        working-directory: gitops
+        run: |
+          set -euo pipefail
+          short="${TAG::12}"
+          branch="bump/oncall-assistant-${short}"
+          git config user.name "oncall-assistant CI"
+          git config user.email "noreply@users.noreply.github.com"
+          git switch -c "$branch"
+          git commit -am "Bump oncall-assistant image to ${short}" \
+            -m "From ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${TAG}"
+          # --force-with-lease makes a workflow re-run idempotent.
+          git push --force-with-lease -u origin "$branch"
+
+          gh label create tag-bump --repo "$GITOPS_REPO" --color 0E8A16 \
+            --description "Automated image tag bump (ADR 0009)" --force >/dev/null
+
+          pr="$(gh pr list --repo "$GITOPS_REPO" --head "$branch" --state open \
+            --json url --jq '.[0].url')"
+          if [ -z "$pr" ]; then
+            body="Automated tag bump (ADR 0009) from ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${TAG}."
+            body+=" Auto-merges when the validate check passes; ArgoCD then syncs."
+            body+=" Image size: ${SIZE} (amd64, unpacked; the node's disk is shared)."
+            pr="$(gh pr create --repo "$GITOPS_REPO" --head "$branch" --base main \
+              --label tag-bump --title "Bump oncall-assistant image to ${short}" --body "$body")"
+          fi
+          # Squash keeps gitops main linear (required by branch protection).
+          gh pr merge "$pr" --repo "$GITOPS_REPO" --auto --squash --delete-branch
+          echo "Opened ${pr}"
+
+          # Older open bumps for THIS app would conflict with this one and
+          # deploy stale tags. Match on the branch prefix so the link
+          # shortener's bumps (also labelled tag-bump) are never touched.
+          gh pr list --repo "$GITOPS_REPO" --label tag-bump --state open \
+            --json number,headRefName \
+            --jq ".[] | select(.headRefName | startswith(\"bump/oncall-assistant-\")) | select(.headRefName != \"${branch}\") | .number" |
+          while read -r old; do
+            gh pr close "$old" --repo "$GITOPS_REPO" --delete-branch \
+              --comment "Superseded by ${pr}."
+          done
