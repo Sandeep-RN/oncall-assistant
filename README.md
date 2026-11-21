@@ -10,8 +10,12 @@ role-played by the author; its documents and its single-node k3s platform are
 real and public. The assistant is deployed onto that platform through its
 GitOps repository, inside a hard resource cap, at no infrastructure cost.
 
-**Status:** build starting (milestone M1, target 2026-12-09). Only `/healthz` exists so far.
-Nothing is live yet.
+**Status (2026-11-22):** milestone M1 (target 2026-12-09) is half built, and **nothing is live
+yet**. Done: the corpus, local embeddings and the pgvector index ([ADR 0001](docs/adr/0001-local-onnx-embeddings-on-python-314.md)),
+`POST /ask` with cited answers or a refusal ([ADR 0002](docs/adr/0002-cite-or-refuse-one-openai-compatible-call.md)),
+the retrieval eval (39 questions, 89% right passage in the top 5) and the container image on GHCR.
+Next: the Kubernetes manifests in the gitops repo (platform issue Sandeep-RN/oci-k8s-gitops-demo#195),
+then the page, saved answers and the daily budget (#6).
 
 - [Customer brief](docs/customer-brief.md): problem, users, constraints, success criteria, delivery
 - [Glossary](GLOSSARY.md): the terms used in this repo and its issues
