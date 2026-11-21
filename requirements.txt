@@ -1,5 +1,11 @@
-# Runtime dependencies, exact pins (same versions as the link shortener's backend).
+# Runtime dependencies, exact pins (same web stack versions as the link shortener's backend).
 fastapi==0.163.0
 # Pinned directly: older Starlette releases carry HIGH CVEs that a Trivy gate fails on.
 starlette==1.10.0
 uvicorn[standard]==0.54.0
+# Binary wheels include libpq for amd64 and arm64 (no compiler in the image).
+psycopg[binary]==3.3.9
+# Embeddings (ADR 0001): ONNX Runtime has no Python 3.15 wheels yet, hence Python 3.14.
+onnxruntime==1.32.0
+tokenizers==0.23.3
+numpy==2.5.5

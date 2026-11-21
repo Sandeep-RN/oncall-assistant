@@ -1,0 +1,19 @@
+# Local development: Postgres with pgvector, the same image CI and the cluster use.
+#
+#   docker compose up -d db
+#   PGHOST=localhost PGPORT=5433 PGUSER=postgres PGDATABASE=postgres pytest -q
+#
+# Port 5433 on the laptop, so it does not clash with another local Postgres.
+# Throwaway data and trust auth: never expose this port beyond localhost.
+services:
+  db:
+    image: pgvector/pgvector:0.8.7-pg18@sha256:38681dc6eaf55308e2a4c6de392d131652dcfac70e1263e35cd9b5ea3fe39782
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "127.0.0.1:5433:5432"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
