@@ -72,6 +72,13 @@ PGHOST=localhost PGPORT=5433 PGUSER=postgres PGDATABASE=postgres .venv/Scripts/p
 .venv/Scripts/python -m app.evals --min-recall 0.9      # exit 1 below the target (the M2 CI gate)
 ```
 
+The set starts with 39 questions (28 answerable, 11 unanswerable) drafted by Claude from the
+documents and accepted by the owner. They are easier than real on-call questions, so a good score
+here is flattering. The set only grows: new questions, especially the owner's own, are added with
+their `author`. Rules: a question is never edited to make it pass; it is changed only when its
+expected source is wrong, with the reason in the pull request. Three labels were widened after the
+first run (A09, A13, A24) once the other passages were checked to hold the answer too.
+
 This scores retrieval only, with no model calls and no cost: for each answerable question, is a
 passage from the right document and section among the top 5? It also prints the best-passage score
 of every question, because a refusal threshold has to be chosen from those ranges. Needs the index

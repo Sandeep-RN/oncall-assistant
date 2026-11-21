@@ -155,3 +155,21 @@ def test_the_report_names_what_a_missed_question_found_instead():
     questions = qs(answerable("A01", "docs/a.md"))
     text = render(evaluate(questions, lambda q: [hit("docs/other.md", score=0.71)], k=5))
     assert "MISSED (best: docs/other.md)" in text and "0%" in text
+
+
+def test_author_is_read_when_present(tmp_path):
+    row = {**answerable(), "author": "owner"}
+    assert load_questions(write(tmp_path, [row, unanswerable()]))[0].author == "owner"
+    assert load_questions(write(tmp_path, [unanswerable()]))[0].author is None
+
+
+def test_the_committed_question_file_is_valid():
+    """A bad edit to evals/questions.jsonl fails here, in CI, not in the middle of an eval run."""
+    from pathlib import Path
+
+    qs_ = load_questions(Path("evals/questions.jsonl"))
+    kinds = {q.kind for q in qs_}
+    assert kinds == {"answerable", "unanswerable"}
+    assert len(qs_) >= 30  # the plan's floor; the set only grows
+    assert all(q.author for q in qs_), "every question records who wrote it"
+    assert all(q.gist for q in qs_ if q.kind == "answerable")

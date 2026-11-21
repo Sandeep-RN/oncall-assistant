@@ -4,7 +4,7 @@ One JSON object per line:
 
     {"id": "A01", "kind": "answerable", "question": "...",
      "sources": [{"repo": "owner/name", "path": "docs/x.md", "heading": "Triage"}],
-     "gist": "what a correct answer says"}
+     "gist": "what a correct answer says", "author": "owner"}
     {"id": "U01", "kind": "unanswerable", "question": "...", "sources": [], "gist": null}
 
 Sources name a document (and optionally a section), never a passage id: ids change whenever the
@@ -39,6 +39,10 @@ class Question:
     question: str
     sources: tuple[Source, ...]
     gist: str | None
+    # Who wrote the question ("claude", "owner", ...). A set written by one author mostly from the
+    # documents is easier than real on-call questions, so every question records its author and
+    # the owner's own questions can be told apart (and weighed) later.
+    author: str | None = None
 
 
 def _parse(row: dict) -> Question:
@@ -56,7 +60,14 @@ def _parse(row: dict) -> Question:
         raise QuestionError("an answerable question needs at least one source")
     if row["kind"] == "unanswerable" and sources:
         raise QuestionError("an unanswerable question must not list sources")
-    return Question(str(row["id"]), row["kind"], row["question"].strip(), sources, row.get("gist"))
+    return Question(
+        str(row["id"]),
+        row["kind"],
+        row["question"].strip(),
+        sources,
+        row.get("gist"),
+        row.get("author"),
+    )
 
 
 def load_questions(path: Path) -> list[Question]:

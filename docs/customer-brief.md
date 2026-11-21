@@ -51,8 +51,8 @@ know every decision that was made, or where it is written.
 
 ## Success criteria
 
-Measured on a fixed set of 30 questions written by the team, about a third
-of which the documents cannot answer:
+Measured on a fixed set of questions about the team's own documents, which only
+grows. It starts at 39 (11 of which the documents cannot answer):
 
 | Criterion | Target |
 |---|---|
@@ -64,8 +64,8 @@ of which the documents cannot answer:
 
 A good response is a live answer, a refusal, or a clearly labelled saved
 answer; errors and timeouts are bad. The question set grows to about 100 by
-M2: with 30 questions, about ten of them unanswerable, one missed refusal
-already costs ten points.
+M2: with 11 unanswerable questions, one missed refusal already costs about nine
+points, which is why the set must grow before its scores are trusted.
 
 ## Out of scope
 
