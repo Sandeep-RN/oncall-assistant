@@ -1,0 +1,12 @@
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+# Keep in step with python-version in .github/workflows/ci.yml and the base
+# image (issue #7): the tests must run on the Python the image ships.
+target-version = "py315"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
