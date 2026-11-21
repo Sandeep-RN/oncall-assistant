@@ -28,3 +28,18 @@ pip install pre-commit && pre-commit install      # gitleaks runs before every c
 ```
 
 Rules for contributors and agents: [CLAUDE.md](CLAUDE.md).
+
+## Corpus
+
+The assistant answers from the Markdown files of the three platform repos
+(`app/corpus/sources.py` lists them; agent-instruction files are left out).
+
+```bash
+.venv/Scripts/python -m app.corpus                  # uses the commits pinned in corpus-lock.json
+.venv/Scripts/python -m app.corpus --update-lock    # pin each repo's current head first
+```
+
+Each file is split at headings (levels 1 to 3) into passages of about 40 to 350 words. Code blocks
+and tables are never cut. Every passage carries its repo, path, heading path, a permalink to the
+heading at the pinned commit (the citation link) and the hash of its file. Output: `data/corpus.jsonl`
+(git-ignored). Storing the passages in Postgres is issue #4.
