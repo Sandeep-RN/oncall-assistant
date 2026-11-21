@@ -1,0 +1,31 @@
+# This repo is PUBLIC: keys, tokens and cluster access never go in.
+.env
+.env.*
+*.pem
+*.key
+kubeconfig*
+*.kubeconfig
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# Downloaded model files and local data (rebuilt, never committed)
+models/
+.cache/
+data/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
