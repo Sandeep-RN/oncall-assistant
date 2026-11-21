@@ -218,6 +218,13 @@ jobs:
             || fail "the embedding model did not load in the image"
           [ "$dims" = "384" ] || fail "expected 384-dimension vectors, got '${dims}'"
           echo "embedding model loads: ${dims} dimensions"
+          # /ask is mounted and fails safe without a provider key or database: 503 "not_configured"
+          # (no key exists in CI, and none ever goes into the image).
+          code="$(curl -s -o /tmp/ask.json -w '%{http_code}' -X POST http://127.0.0.1:8080/ask \
+            -H 'Content-Type: application/json' -d '{"question":"smoke test"}')"
+          grep -q '"not_configured"' /tmp/ask.json && [ "$code" = "503" ] \
+            || fail "/ask should answer 503 not_configured in CI, got ${code}: $(cat /tmp/ask.json)"
+          echo "/ask answers 503 not_configured without a key"
 
       - name: Log in to GHCR
         if: github.event_name == 'push'

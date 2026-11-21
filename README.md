@@ -83,3 +83,24 @@ This scores retrieval only, with no model calls and no cost: for each answerable
 passage from the right document and section among the top 5? It also prints the best-passage score
 of every question, because a refusal threshold has to be chosen from those ranges. Needs the index
 (`python -m app.index`).
+
+## Ask
+
+`POST /ask` with `{"question": "..."}` (3 to 500 characters) answers from the top 5 passages,
+citing them as `[n]`, or says "I don't know" ([ADR 0002](docs/adr/0002-cite-or-refuse-one-openai-compatible-call.md)):
+
+| Response | Meaning |
+|---|---|
+| 200 `kind: live` | an answer with `citations` (URL at the pinned commit, repo, path, section) |
+| 200 `kind: refusal` | the documents do not answer it (`reason: model`), or the model cited nothing (`uncited`) |
+| 503 `kind: unavailable` | provider rate limit, timeout or error, too many questions at once, or not configured; `notice` says which |
+
+Every response carries `timings_ms` and `tokens`. Logs keep a hash and the length of the question,
+never its text.
+
+```bash
+# The development key from .env (git-ignored), laptop only; the cluster uses Groq.
+set -a; . ./.env; set +a
+LLM_PROVIDER=kodekey PGHOST=localhost PGPORT=5433 PGUSER=postgres PGDATABASE=postgres \
+  .venv/Scripts/python -m app.answer "How do I roll back a bad deploy?"
+```
