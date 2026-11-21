@@ -20,13 +20,18 @@ Nothing is live yet.
 
 ## Develop
 
+Python **3.14** (not 3.15: ONNX Runtime has no 3.15 wheels yet, [ADR 0001](docs/adr/0001-local-onnx-embeddings-on-python-314.md)).
+
 ```bash
-python -m venv .venv && .venv/Scripts/python -m pip install -r requirements-dev.txt   # Linux/macOS: .venv/bin/python
-.venv/Scripts/python -m pytest -q
+py -3.14 -m venv .venv && .venv/Scripts/python -m pip install -r requirements-dev.txt   # Linux/macOS: python3.14, .venv/bin/
+.venv/Scripts/python -m app.embed.download        # the pinned model, about 130 MB, sha256 checked; once
+docker compose up -d db                           # Postgres with pgvector on 127.0.0.1:5433
+PGHOST=localhost PGPORT=5433 PGUSER=postgres PGDATABASE=postgres .venv/Scripts/python -m pytest -q
 .venv/Scripts/ruff check . && .venv/Scripts/ruff format --check .
 pip install pre-commit && pre-commit install      # gitleaks runs before every commit
 ```
 
+Without the database or the model, those tests skip locally; CI provides both and fails on any skip.
 Rules for contributors and agents: [CLAUDE.md](CLAUDE.md).
 
 ## Corpus
@@ -42,4 +47,16 @@ The assistant answers from the Markdown files of the three platform repos
 Each file is split at headings (levels 1 to 3) into passages of about 40 to 350 words. Code blocks
 and tables are never cut. Every passage carries its repo, path, heading path, a permalink to the
 heading at the pinned commit (the citation link) and the hash of its file. Output: `data/corpus.jsonl`
-(git-ignored). Storing the passages in Postgres is issue #4.
+(git-ignored).
+
+## Index
+
+```bash
+PGHOST=localhost PGPORT=5433 PGUSER=postgres PGDATABASE=postgres .venv/Scripts/python -m app.index
+```
+
+One run fetches each repo's current head (or `--lock corpus-lock.json` for the pinned commits),
+embeds only new or changed files with the local model and writes them to Postgres with pgvector,
+in one transaction under an advisory lock. Exit codes: 0 done, 1 a problem to look at, 2 another
+run is in progress. Full run on the current corpus: about 2 minutes, peak memory 247 MiB; a run
+with nothing changed: about 3 seconds ([ADR 0001](docs/adr/0001-local-onnx-embeddings-on-python-314.md)).

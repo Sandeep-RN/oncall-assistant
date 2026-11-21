@@ -9,4 +9,4 @@ status line points to the record that amends or replaces it.
 
 | # | Decision | Status |
 |---|---|---|
-| | None yet | |
+| [0001](0001-local-onnx-embeddings-on-python-314.md) | Local ONNX embeddings with bge-small-en-v1.5, on Python 3.14 (no cp315 ONNX Runtime yet) | Accepted |
