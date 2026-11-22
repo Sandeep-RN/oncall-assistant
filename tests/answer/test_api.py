@@ -1,6 +1,7 @@
 import threading
 
 import numpy as np
+import psycopg
 import pytest
 from fastapi.testclient import TestClient
 
@@ -91,6 +92,35 @@ def test_provider_trouble_is_a_503_with_a_notice(api, error, reason):
     assert r.status_code == 503
     assert r.json()["kind"] == "unavailable" and r.json()["reason"] == reason
     assert "notice" in r.json()
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        # Before the first index run:
+        psycopg.errors.UndefinedTable('relation "passages" does not exist'),
+        psycopg.OperationalError("connection refused"),  # a Postgres outage
+    ],
+    ids=["missing_table", "connection_error"],
+)
+def test_a_database_error_is_a_503_not_a_500(api, error, caplog):
+    def broken_search(vec, k):
+        raise error
+
+    called = []
+    a = Answerer(FakeEmbedder(), broken_search, lambda m: called.append(1), model="m")
+    app.state.answerer = a
+    with caplog.at_level("INFO"):
+        r = ask(api, "my very secret question about the database")
+    assert r.status_code == 503
+    body = r.json()
+    assert body["kind"] == "unavailable" and body["reason"] == "index_unavailable"
+    assert body["notice"] and called == []  # no model call without passages
+    # One log line, no traceback, and never the question itself.
+    assert "reason=index_unavailable" in caplog.text
+    assert "Traceback" not in caplog.text and "secret question" not in caplog.text
+    # The slot was released: the next request is not turned away as "busy".
+    assert ask(api).json()["reason"] == "index_unavailable"
 
 
 def test_no_passages_means_a_refusal_without_calling_the_model(api):
