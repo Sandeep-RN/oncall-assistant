@@ -7,6 +7,7 @@ import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 
+from app.answer.text import clean
 from app.index.store import Hit
 
 # Bounds one request at about 5 x 450 words plus the rules: roughly 2.5 to 4K tokens.
@@ -55,7 +56,9 @@ class Parsed:
 
 
 def parse_answer(text: str, *, k: int) -> Parsed:
-    text = text.strip()
+    # First of all: characters that look like ASCII but break a copy-paste (issue #39), such as the
+    # non-breaking hyphens gpt-oss put in a file path. A refusal is cleaned too, harmlessly.
+    text = clean(text.strip())
     if _REFUSAL.match(text):
         return Parsed("refusal", REFUSAL, reason="model")
     cited: list[int] = []

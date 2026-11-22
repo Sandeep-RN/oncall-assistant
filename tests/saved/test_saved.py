@@ -7,12 +7,16 @@ from pathlib import Path
 import pytest
 
 from app.answer.service import Answer
+from app.answer.text import LOOKALIKES
 from app.evals.questions import load_questions
 from app.saved.build import SAVED_QUESTIONS, BuildError, build_saved
 from app.saved.store import SAVED_FILE, SavedAnswers, load_saved, normalize
 
 ROOT = Path(__file__).parents[2]
 LOCK = json.loads((ROOT / "corpus-lock.json").read_text())
+
+# Lookalike characters written as chr(): a non-breaking hyphen looks exactly like a hyphen.
+NBH, RSQ, NBSP = chr(0x2011), chr(0x2019), chr(0x00A0)
 
 URL = "https://github.com/Sandeep-RN/r/blob/abc/docs/a.md#restart"
 
@@ -215,8 +219,18 @@ def test_the_build_leaves_the_old_file_alone_when_a_question_fails(tmp_path):
 
 def test_the_build_replaces_lookalike_characters_a_copy_paste_would_break_on(tmp_path):
     # Found 2026-11-22: gpt-oss wrote a file path with U+2011 non-breaking hyphens
-    # (`link‑tokens‑sealedsecret.yaml`), which does not exist when pasted into a shell.
-    text = "Edit `link‑tokens.yaml`, revert the tag‑bump’s PR now [1]."
+    # (link, tokens and sealedsecret joined by U+2011): not a file anyone has once it is pasted.
+    text = (
+        "Edit `link"
+        + NBH
+        + "tokens.yaml`, revert the tag"
+        + NBH
+        + "bump"
+        + RSQ
+        + "s PR"
+        + NBSP
+        + "now [1]."
+    )
     path = tmp_path / "out.json"
     build_saved(lambda q: live(text), {"restart": "How do I restart?"}, generated="d", path=path)
     assert (
@@ -226,7 +240,7 @@ def test_the_build_replaces_lookalike_characters_a_copy_paste_would_break_on(tmp
 
 
 def test_the_shipped_answers_hold_no_lookalike_characters(shipped):
-    bad = "‐‑  ‘’“”"
+    bad = {chr(code) for code in LOOKALIKES}  # the shared table: one definition everywhere
     for a in shipped.all():
         assert not [ch for ch in a["answer"] if ch in bad], a["id"]
 
