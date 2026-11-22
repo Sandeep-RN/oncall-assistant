@@ -34,6 +34,16 @@ def test_the_page_is_served_as_html(page):
     assert "<textarea" in page.text and 'id="sources"' in page.text
 
 
+def test_head_answers_like_get_but_without_a_body(page):
+    # Found 2026-11-22 on the live site: HEAD / was a 405. Link previews, uptime checks and
+    # `curl -I` use HEAD, and it must say the same as GET (RFC 9110): same headers, no body.
+    head = TestClient(app).head("/")
+    assert head.status_code == 200
+    assert head.content == b""
+    for name in ("content-type", "content-security-policy", "cache-control", "content-length"):
+        assert head.headers[name] == page.headers[name], name
+
+
 def test_the_page_is_not_cached_across_deploys(page):
     assert page.headers["cache-control"] == "no-cache"
 
