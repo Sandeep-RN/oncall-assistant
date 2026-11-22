@@ -71,7 +71,7 @@ _Avoid_: quota (that word is the provider's limit or the OCI quota policy)
 An answer written by the model for this question from retrieved passages.
 
 **Saved answer**:
-A pre-written answer to an example question, shown when the daily LLM budget is spent or the provider is unavailable.
+A pre-written, cited answer to an example question, shown and clearly labelled when the free model tier is at its limit: the daily LLM budget is spent, the provider answers 429, or two answers are already running. A real fault (timeout, provider error, database down) is not covered: it stays an error.
 _Avoid_: cached answer, fallback
 
 **Demo token**:
