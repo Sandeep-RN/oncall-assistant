@@ -70,6 +70,10 @@ class OnnxEmbedder:
         # embedder can serve concurrent requests in the app.
         self.tokenizer.no_padding()
         self.pad_id = self.tokenizer.token_to_id("[PAD]") or 0
+        # The wheel contains a telemetry provider (ADR 0001, issue #15). Opt out before the
+        # session exists. It cannot silence the "Failed to persist telemetry device ID" warning:
+        # that is printed by `import onnxruntime` itself, before any of our code runs.
+        ort.disable_telemetry_events()
         opts = ort.SessionOptions()
         # One thread: the pod has a CPU limit, and more threads only add contention.
         opts.intra_op_num_threads = threads

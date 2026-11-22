@@ -218,6 +218,14 @@ jobs:
             || fail "the embedding model did not load in the image"
           [ "$dims" = "384" ] || fail "expected 384-dimension vectors, got '${dims}'"
           echo "embedding model loads: ${dims} dimensions"
+          # The same again with NO network at all (issue #15): loading and embedding must not
+          # need one, so the library cannot be depending on a connection to work. This cannot
+          # prove it never tries one; the NetworkPolicy (M3) enforces that.
+          dims_offline="$(docker run --rm --network none --entrypoint python "scan:${GITHUB_SHA}" \
+            -c "from app.embed.model import OnnxEmbedder; print(OnnxEmbedder().embed_query('ping').shape[0])")" \
+            || fail "the embedding model did not load with --network none"
+          [ "$dims_offline" = "384" ] || fail "offline: expected 384 dimensions, got '${dims_offline}'"
+          echo "embedding model loads with no network: ${dims_offline} dimensions"
           # /ask is mounted and fails safe without a provider key or database: 503 "not_configured"
           # (no key exists in CI, and none ever goes into the image).
           code="$(curl -s -o /tmp/ask.json -w '%{http_code}' -X POST http://127.0.0.1:8080/ask \
