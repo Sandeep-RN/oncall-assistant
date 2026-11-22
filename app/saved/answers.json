@@ -1,12 +1,12 @@
 {
   "generated": "2026-11-22",
   "model": "gpt-oss-120b",
-  "note": "Drafted by `python -m app.saved.build` over the pinned corpus, then reviewed by hand. Two drafts were trimmed because they claimed more than their cited passage says (no-point-in-time-restore: 'you can only restore from the available dump files'; assistant-memory-cap: a sentence saying pods request the same as their limits, which is wrong for CPU). Rebuilding overwrites this file: re-review the diff.",
+  "note": "Drafted by `python -m app.saved.build` over the pinned corpus (2026-11-22), then edited by hand twice. 2026-11-22: two drafts were trimmed because they claimed more than their cited passage says. 2026-11-23: each answer was read beside its full passages by a second model and the owner; changes: roll-back-a-deploy (adds the first step, scopes it to the link shortener, drops 'immediately'), revoke-a-token (says the runbook has not been run on k3s, keeps the ${#TOKEN} check and that links the token already made keep working), no-point-in-time-restore (scoped to the link shortener's Postgres), biggest-availability-limit (says the roadmap does not rank its limits), assistant-memory-cap (limits and LimitRange stated precisely). Rebuilding overwrites this file: re-review the diff.",
   "answers": [
     {
       "id": "roll-back-a-deploy",
       "question": "Errors started right after a deploy. How do I roll back?",
-      "answer": "To roll back, revert the tag-bump pull request in the GitOps repository; Argo CD will then redeploy the previous image automatically[1]. Do not use `kubectl set image` or `kubectl rollout undo`, because Argo CD would immediately revert those changes (self-heal)[1].",
+      "answer": "For the link shortener's redirect errors (the redirect SLO runbook): first compare the time the errors started with the last tag-bump pull request in the GitOps repository [1]. To roll back, revert that bump PR in Git; Argo CD then rolls the previous image back out [1]. Do not use `kubectl set image` or `kubectl rollout undo`: Argo CD would revert those changes (self-heal) [1].",
       "citations": [
         {
           "n": 1,
@@ -20,7 +20,7 @@
     {
       "id": "revoke-a-token",
       "question": "A link-creation token leaked. How do I revoke it?",
-      "answer": "1. On a new branch from the latest `origin/main`, open the SealedSecret file  \n   `apps/link-shortener/overlays/k3s/link-tokens-sealedsecret.yaml` and delete the line for the leaked token under `spec.encryptedData` (leave the other lines untouched) [1].  \n2. Open a PR, let the CI `validate` run, and merge it; then check each layer until no pod lists the token [1].  \n3. Verify revocation by running the same `curl` that previously succeeded; it should now return **401** while other valid tokens still return **201** [1].  \n4. Finally, delete the token's value from the password manager [1].  \n\n(Adding or rotating tokens is done with `scripts/seal-link-tokens.sh`, and revoking is simply deleting the key as described in the script header) [4].",
+      "answer": "This procedure was followed live on OKE and has not been run on k3s yet [1]. If a token leaks, revoke it first, then look at what it created [1].\n\n1. On a new branch from the latest `origin/main`, open `apps/link-shortener/overlays/k3s/link-tokens-sealedsecret.yaml` and delete that token's line under `spec.encryptedData`. Do not touch the other lines [1].\n2. Open a PR, wait for `validate`, and merge it. Then check each layer until no pod lists the token [1].\n3. Prove it: run the same `curl` with the revoked value (check that `${#TOKEN}` is not 0). It should now return `401`, and no new link should carry its `created_by`. A remaining token should still return `201` [1].\n4. Delete the value from the password manager [1].\n\nLinks the token already created keep working, because redirects are public; their `created_by` still names it. To list them, run `SELECT code, url, created_at FROM links WHERE created_by = 'NAME'` in database `linkshortener`, as the superuser through `postgres-0` [1]. Steps 2 and 3 refer to earlier steps of the runbook (\"as in step 5\", \"the same curl as above\") that this answer does not copy; read the linked section for them [1]. Revoking is deleting the key; see the header of `scripts/seal-link-tokens.sh` [4].",
       "citations": [
         {
           "n": 1,
@@ -41,7 +41,7 @@
     {
       "id": "no-point-in-time-restore",
       "question": "Can I restore Postgres to a point in time?",
-      "answer": "No. The backups are logical (`pg_dump`) and there is no point-in-time recovery capability[2].",
+      "answer": "No, for the link shortener's Postgres, the database this runbook covers: its backups are logical (`pg_dump`) and there is no point-in-time recovery [2].",
       "citations": [
         {
           "n": 2,
@@ -55,7 +55,7 @@
     {
       "id": "biggest-availability-limit",
       "question": "What is the biggest availability limit of this platform?",
-      "answer": "The platform's biggest availability limit is that it runs on a single node, so any node-level event—such as a reboot, a k3s upgrade, or a Traefik restart—causes an outage [2][1].",
+      "answer": "The roadmap does not rank its accepted limits. The first one listed is that the platform runs on one node, so there is no high availability: a reboot, a k3s upgrade or a Traefik restart is an outage [2][1]. The reason given is the $0-a-month constraint; multi-node behaviour was shown on OKE [2]. PostgreSQL is also a single replica on a node-local volume with no failover, and the nightly dump is the recovery path [1].",
       "citations": [
         {
           "n": 2,
@@ -76,7 +76,7 @@
     {
       "id": "assistant-memory-cap",
       "question": "How much memory and CPU may the second application (the assistant) use?",
-      "answer": "The assistant's namespace is limited by a ResourceQuota to **1 GiB of memory** and **1 CPU of limits** [1].",
+      "answer": "The assistant's namespace has a ResourceQuota of **1 GiB of memory limits** and **1 CPU of limits** for everything in it, and a LimitRange supplies defaults so no pod runs uncapped [1]. Memory requests equal memory limits, and the CPU request is kept below the CPU limit [1].",
       "citations": [
         {
           "n": 1,
@@ -87,5 +87,6 @@
         }
       ]
     }
-  ]
+  ],
+  "reviewed": "2026-11-23"
 }

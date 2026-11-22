@@ -134,6 +134,45 @@ def test_saved_ids_are_plain_slugs(shipped):
     assert all(re.fullmatch(r"[a-z0-9-]+", a["id"]) for a in shipped.all())
 
 
+# --- decisions from the second-model review of 2026-11-23 (each answer read beside its passages) --
+
+
+def answer_text(shipped, id_):
+    return next(a for a in shipped.all() if a["id"] == id_)["answer"]
+
+
+def test_the_revoke_answer_keeps_the_runbooks_not_run_on_k3s_caveat(shipped):
+    # The runbook it cites still says "Not run on k3s yet" (checked 2026-11-23). A saved answer is
+    # shown as fact, so it must not present an untested procedure as proven.
+    assert "not been run on k3s" in answer_text(shipped, "revoke-a-token")
+
+
+def test_the_revoke_answer_keeps_the_checks_and_the_leaked_links_warning(shipped):
+    text = answer_text(shipped, "revoke-a-token")
+    assert "${#TOKEN}" in text  # without it a 401 does not prove the token was revoked
+    assert "keep working" in text  # links the leaked token already made
+
+
+def test_answers_taken_from_link_shortener_runbooks_say_which_system_they_are_about(shipped):
+    # The assistant's own database has no backups and its deploys are not the link shortener's.
+    for id_ in ("roll-back-a-deploy", "no-point-in-time-restore"):
+        assert "link shortener" in answer_text(shipped, id_).lower(), id_
+
+
+def test_the_availability_answer_does_not_claim_a_ranking_its_source_does_not_make(shipped):
+    # The roadmap lists its accepted limits in a table and does not rank them.
+    text = answer_text(shipped, "biggest-availability-limit")
+    assert "does not rank" in text
+    assert "biggest availability limit is" not in text.lower()
+
+
+def test_no_answer_uses_a_word_the_review_found_unsupported(shipped):
+    # "immediately" (roll back) and "simply" (revoke) are in no source passage.
+    for a in shipped.all():
+        assert "immediately" not in a["answer"].lower(), a["id"]
+        assert "simply" not in a["answer"].lower(), a["id"]
+
+
 # --- the build: only a real, cited, live answer may become a saved answer ----------------------
 
 
