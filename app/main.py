@@ -23,6 +23,25 @@ from app.answer.service import Answerer, Unavailable
 log = logging.getLogger("oncall")
 
 
+def configure_logging() -> None:
+    """Send the app's own log lines (loggers under "oncall") to stderr (issue #26).
+
+    uvicorn configures only its own loggers, so without this the root logger stays at WARNING and
+    every INFO line (one per question, from "oncall.ask") is dropped. The level is set on the
+    "oncall" logger only: the root stays at WARNING, so third-party libraries (httpx logs every
+    provider URL at INFO) stay quiet. A no-op handler-wise if the host already installed one
+    (pytest does), so tests keep using caplog.
+    """
+    logging.basicConfig(format="%(asctime)s %(levelname)s %(name)s %(message)s")
+    name = os.environ.get("ONCALL_LOG_LEVEL", "INFO").strip().upper()
+    level = logging.getLevelName(name)
+    # getLevelName returns a string ("Level LOUD") for an unknown name: fall back to INFO.
+    log.setLevel(level if isinstance(level, int) else logging.INFO)
+
+
+configure_logging()
+
+
 def build_answerer() -> tuple[Answerer, object]:
     """The real wiring: local model, a small Postgres pool, the configured provider."""
     import httpx
