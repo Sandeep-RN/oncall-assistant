@@ -1,5 +1,6 @@
 """On-call assistant API.
 
+- GET  /         the page: one static file with a question box (issue #6, app/page.py).
 - GET  /healthz  liveness only: never touches the database, the model files or the provider.
 - POST /ask      a cited answer or a refusal from the team's documents (ADR 0002).
 
@@ -15,12 +16,19 @@ import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
 
-from app.answer.service import Answerer, Unavailable
+from app.answer.service import Answerer, Search, Unavailable
+from app.page import load_page
 
 log = logging.getLogger("oncall")
+
+# How long a question waits for a database connection before it gives up with a 503
+# "index_unavailable". psycopg_pool waits 30 s by default, far over the 8 s latency target: a
+# down Postgres would make every visitor wait before the same clean 503 (issue #31, #6). Embedding
+# takes ~0.1 s, so 3 s leaves the answer well inside the target even when the pool is empty.
+DB_POOL_TIMEOUT = 3.0
 
 
 def configure_logging() -> None:
@@ -41,29 +49,46 @@ def configure_logging() -> None:
 
 configure_logging()
 
+# Read at import: a missing or unreadable page file is a broken build and should fail here, not
+# on the first visitor. The image smoke test in CI requests it.
+PAGE = load_page()
 
-def build_answerer() -> tuple[Answerer, object]:
-    """The real wiring: local model, a small Postgres pool, the configured provider."""
-    import httpx
+
+def open_pool(conninfo: str = "", *, timeout: float = DB_POOL_TIMEOUT):
+    """The app's small Postgres pool. A caller that cannot get a connection within `timeout`
+    seconds gets psycopg_pool.PoolTimeout, a psycopg error, which /ask turns into a 503."""
     from psycopg_pool import ConnectionPool
 
-    from app.answer.llm import TIMEOUT, LLMSettings, chat
-    from app.embed.model import OnnxEmbedder
-    from app.index.store import search
-
-    settings = LLMSettings.from_env()
-    embedder = OnnxEmbedder()
     # Two connections: one per concurrent answer (Answerer allows two at a time).
-    pool = ConnectionPool(os.environ.get("DATABASE_URL", ""), min_size=1, max_size=2, open=True)
-    http = httpx.Client(timeout=TIMEOUT)
+    return ConnectionPool(conninfo, min_size=1, max_size=2, timeout=timeout, open=True)
+
+
+def pool_search(pool) -> Search:
+    """A search function that borrows a connection from the pool for each question."""
+    from app.index.store import search
 
     def search_pool(vector, k):
         with pool.connection() as conn:
             return search(conn, vector, k=k)
 
+    return search_pool
+
+
+def build_answerer() -> tuple[Answerer, object]:
+    """The real wiring: local model, a small Postgres pool, the configured provider."""
+    import httpx
+
+    from app.answer.llm import TIMEOUT, LLMSettings, chat
+    from app.embed.model import OnnxEmbedder
+
+    settings = LLMSettings.from_env()
+    embedder = OnnxEmbedder()
+    pool = open_pool(os.environ.get("DATABASE_URL", ""))
+    http = httpx.Client(timeout=TIMEOUT)
+
     answerer = Answerer(
         embedder,
-        search_pool,
+        pool_search(pool),
         lambda messages: chat(settings, messages, client=http),
         model=settings.model,
     )
@@ -92,6 +117,11 @@ app.state.answerer = None
 
 class Question(BaseModel):
     question: str = Field(min_length=3, max_length=500)
+
+
+@app.get("/", include_in_schema=False)
+def page() -> HTMLResponse:
+    return HTMLResponse(PAGE.html, headers=PAGE.headers)
 
 
 @app.get("/healthz")
