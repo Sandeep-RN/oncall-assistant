@@ -139,6 +139,16 @@ def test_both_the_live_answer_and_the_saved_answers_go_through_the_renderer(page
     assert script.count("rich(") >= 3  # the definition and two calls
 
 
+def test_a_429_uses_the_edges_retry_after_and_falls_back_without_it(page):
+    # Checked live 2026-11-23: Traefik's 429 is plain text with `Retry-After: 15`. The page used to
+    # say "wait a minute" whatever the edge said. It reads the header (seconds only, clamped) and
+    # keeps the old wording when the header is missing or is not a number.
+    script = blocks(page.text, "script")[0]
+    assert '"Retry-After"' in script
+    assert "429" in script and "Please wait a minute" in script  # the fallback stays
+    assert "parseInt" in script  # the header is a number of seconds, never trusted as text
+
+
 def test_the_page_can_send_a_demo_token_and_explains_a_rejected_one(page):
     script = blocks(page.text, "script")[0]
     # The token goes in a header (never the URL), is kept only for the tab (sessionStorage, not
