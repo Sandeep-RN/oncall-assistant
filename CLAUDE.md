@@ -11,7 +11,7 @@ Workspace-level rules and the working plan are private files one folder up (they
 - Build features test-first. Keep `/healthz` working and free of database and provider calls.
 - CI pins third-party Actions by commit SHA. Runtime and dev dependencies are exact pins.
 - The assistant's own limits are in ADR 0025: 1 GiB of memory and 1 CPU for everything in its
-  namespace (app 384Mi, Postgres 256Mi, indexing Job 384Mi at peak). Embeddings run on ONNX
+  namespace (app 320Mi, Postgres 256Mi, indexing Job 384Mi, role Job 64Mi). Embeddings run on ONNX
   Runtime; no PyTorch. Keep the image and memory use inside that budget.
 - Secrets: only the public provider's key (Groq) and the demo tokens ever reach the cluster.
   The development and eval key (KodeKey) lives on the developer's laptop and in CI secrets, never

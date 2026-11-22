@@ -14,6 +14,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
 import numpy as np
+import psycopg
 
 from app.answer.llm import Completion, LLMError
 from app.answer.prompt import build_messages, parse_answer
@@ -29,6 +30,7 @@ NOTICES = {
     "rate_limited": "The free model tier is busy right now. Please try again in a minute.",
     "timeout": "The model did not answer in time. Please try again.",
     "busy": "Too many questions at once. Please try again in a few seconds.",
+    "index_unavailable": "The document index is not available right now. Please try again later.",
 }
 DEFAULT_NOTICE = "Live answers are unavailable right now. Please try again later."
 
@@ -68,7 +70,7 @@ class Answerer:
         max_concurrent: int = 2,
     ):
         self.embedder, self.search, self.llm, self.model, self.k = embedder, search, llm, model, k
-        # Bounds memory in a 384Mi pod and calls against a 30-a-minute provider limit.
+        # Bounds memory in a 320Mi pod and calls against a 30-a-minute provider limit.
         self._slots = threading.BoundedSemaphore(max_concurrent)
 
     def ask(self, question: str) -> Answer:
@@ -82,7 +84,15 @@ class Answerer:
 
     def _ask(self, question: str) -> Answer:
         t0 = time.perf_counter()
-        hits = list(self.search(self.embedder.embed_query(question), self.k))
+        vector = self.embedder.embed_query(question)
+        try:
+            hits = list(self.search(vector, self.k))
+        except psycopg.Error as e:
+            # An empty database before the first index run (UndefinedTable) or a Postgres outage
+            # (OperationalError, incl. a pool timeout). Log the error class only: no traceback
+            # and no message text, which could echo query parameters.
+            self._log(question, "unavailable", reason="index_unavailable", error=type(e).__name__)
+            raise Unavailable("index_unavailable") from e
         t1 = time.perf_counter()
         timings = {"retrieve": round((t1 - t0) * 1000)}
         if not hits:  # an empty index: nothing to answer from, no model call
@@ -118,13 +128,16 @@ class Answerer:
             parsed.kind, parsed.answer, citations, parsed.reason, self.model, timings, tokens
         )
 
-    def _log(self, question: str, kind: str, *, reason=None, timings=None, tokens=None) -> None:
+    def _log(
+        self, question: str, kind: str, *, reason=None, timings=None, tokens=None, error=None
+    ) -> None:
         log.info(
-            "ask q_hash=%s q_len=%d kind=%s reason=%s timings_ms=%s tokens=%s",
+            "ask q_hash=%s q_len=%d kind=%s reason=%s timings_ms=%s tokens=%s error=%s",
             question_hash(question),
             len(question),
             kind,
             reason,
             timings,
             tokens,
+            error,
         )
