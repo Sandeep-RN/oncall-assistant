@@ -16,8 +16,8 @@ local embeddings and the pgvector index ([ADR 0001](docs/adr/0001-local-onnx-emb
 `POST /ask` with cited answers or a refusal ([ADR 0002](docs/adr/0002-cite-or-refuse-one-openai-compatible-call.md)),
 the retrieval eval (39 questions, 89% right passage in the top 5), the container image on GHCR,
 a one-file question page at `/` that shows every failure the edge or the app can send, and saved
-answers when the free model tier is at its limit ([ADR 0003](docs/adr/0003-saved-answers-on-capacity-limits-and-a-daily-budget.md)).
-Next (#6): the daily budget and the demo token.
+answers when the free model tier is at its limit, and a daily token budget with demo tokens that lift
+the public share ([ADR 0003](docs/adr/0003-saved-answers-on-capacity-limits-and-a-daily-budget.md)).
 
 - [Customer brief](docs/customer-brief.md): problem, users, constraints, success criteria, delivery
 - [Glossary](GLOSSARY.md): the terms used in this repo and its issues
@@ -99,12 +99,29 @@ citing them as `[n]`, or says "I don't know" ([ADR 0002](docs/adr/0002-cite-or-r
 |---|---|
 | 200 `kind: live` | an answer with `citations` (URL at the pinned commit, repo, path, section) |
 | 200 `kind: refusal` | the documents do not answer it (`reason: model`), or the model cited nothing (`uncited`) |
-| 200 `kind: saved` | a capacity limit (the provider's 429, or two answers already running): the `saved` answers, and `match` says which one is the visitor's own question, if any ([ADR 0003](docs/adr/0003-saved-answers-on-capacity-limits-and-a-daily-budget.md)) |
+| 401 `kind: unauthorized` | the `X-Demo-Token` header holds a token that matches none (never treated as a visitor) |
+| 200 `kind: saved` | a capacity limit (the daily budget is spent, the provider's 429, or two answers already running): the `saved` answers, and `match` says which one is the visitor's own question, if any ([ADR 0003](docs/adr/0003-saved-answers-on-capacity-limits-and-a-daily-budget.md)) |
 | 503 `kind: unavailable` | a fault: timeout, provider error, bad reply, database unavailable, or not configured; `notice` says which |
 
 Every live answer carries `timings_ms` and `tokens`. Logs keep a hash and the length of the question,
 never its text. `GET /saved` lists the saved answers (no database or key needed) and `GET /` is the
 question page.
+
+## Daily budget and demo tokens
+
+The provider's free tier allows about 200K tokens a day for everyone together, so the assistant
+counts tokens (not calls) in Postgres, in one small table, `llm_usage` ([ADR 0003](docs/adr/0003-saved-answers-on-capacity-limits-and-a-daily-budget.md)).
+Visitors may use `PUBLIC_SHARE_PCT` (70%) of `DAILY_TOKENS_TOTAL`; when it is spent they get the
+saved answers, and the check comes before the embedding, so a spent budget costs nothing. A **demo
+token** (`X-Demo-Token`, or the "I have a demo token" box on the page) lifts the public share for its
+holder: it may use what is left of the day's total. It does not lift the provider's own per-minute
+limit or the edge's per-client limit. The day is a UTC day (Groq documents no daily reset time).
+
+The app role is read-only; it writes only that table, and only inside an explicit
+`SET TRANSACTION READ WRITE` (the platform repo grants it, and runs the same rules on a real Postgres
+in CI). The cluster holds only the SHA-256 of each token, one file per token in `DEMO_TOKEN_DIR`;
+a token added or revoked works within about a minute, with no restart. A broken ledger never stops
+an answer (it is logged as `budget_error`); a database that is down fails at once with a 503.
 
 ## Saved answers
 

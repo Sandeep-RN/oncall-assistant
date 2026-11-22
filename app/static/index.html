@@ -50,6 +50,9 @@
   a { color: var(--accent); }
   #status.notice { color: var(--fg); background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--accent); padding: .6rem .8rem; border-radius: .5rem; }
   button.link { padding: 0; font-weight: 400; color: var(--accent); background: none; text-decoration: underline; }
+  details { margin: .6rem 0; }
+  summary { cursor: pointer; color: var(--accent); }
+  input[type="password"] { width: 100%; padding: .5rem .6rem; font: inherit; color: inherit; background: var(--card); border: 1px solid var(--line); border-radius: .5rem; }
   #saved[hidden] { display: none; }
   .saved-item { background: var(--card); border: 1px solid var(--line); border-radius: .5rem; padding: .8rem 1.2rem; margin-bottom: 1rem; }
   .saved-item.match { border-left: 4px solid var(--accent); }
@@ -80,6 +83,14 @@
       <button id="submit" type="submit">Ask</button>
     </div>
   </form>
+
+  <details id="token-box" class="small">
+    <summary>I have a demo token</summary>
+    <p>A demo token lets its holder use the part of the daily allowance that visitors cannot. It is
+    kept only in this tab and sent only with your questions.</p>
+    <label for="token">Demo token</label>
+    <input id="token" type="password" autocomplete="off" spellcheck="false" maxlength="200">
+  </details>
 
   <div id="status" role="status" aria-live="polite"></div>
   <p class="small"><button id="show-saved" type="button" class="link">See saved example answers</button>
@@ -118,6 +129,7 @@
   // One message per failure we know. 413 and 429 come from the edge (Traefik) as plain text, so
   // they are recognised by status alone; 422 comes from the app; 503 carries its own notice.
   const MESSAGES = {
+    401: "That demo token is not recognised. Check it, or clear the box to ask as a visitor.",
     413: "That question is too long. Please keep it under 500 characters.",
     422: "Questions need 3 to 500 characters.",
     429: "You are asking too fast. Please wait a minute and try again.",
@@ -140,6 +152,24 @@
   const savedSection = document.getElementById("saved");
   const savedList = document.getElementById("saved-list");
   const showSaved = document.getElementById("show-saved");
+  const tokenBox = document.getElementById("token-box");
+  const tokenInput = document.getElementById("token");
+
+  // The demo token (ADR 0003) lifts the public share of the daily budget for its holder. It goes in
+  // a request header, never in the URL, and is kept only for this tab: session storage is gone when
+  // the tab closes. Reading or writing it can throw (some private modes): then it is not kept.
+  const TOKEN_KEY = "demoToken";
+  function storedToken() {
+    try { return sessionStorage.getItem(TOKEN_KEY) || ""; } catch { return ""; }
+  }
+  function keepToken(value) {
+    try {
+      if (value) sessionStorage.setItem(TOKEN_KEY, value); else sessionStorage.removeItem(TOKEN_KEY);
+    } catch { /* not kept: it still works until the page is reloaded */ }
+  }
+  tokenInput.value = storedToken();
+  if (tokenInput.value) tokenBox.open = true;
+  tokenInput.addEventListener("input", () => keepToken(tokenInput.value.trim()));
 
   // kind: "error" (a problem), "notice" (information, e.g. live answers are paused) or "".
   function setStatus(text, kind) {
@@ -152,9 +182,12 @@
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
     try {
+      const headers = { "Content-Type": "application/json" };
+      const token = tokenInput.value.trim();
+      if (token) headers["X-Demo-Token"] = token;
       const res = await fetch("/ask", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ question }),
         signal: controller.signal,
       });

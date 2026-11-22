@@ -139,6 +139,16 @@ def test_both_the_live_answer_and_the_saved_answers_go_through_the_renderer(page
     assert script.count("rich(") >= 3  # the definition and two calls
 
 
+def test_the_page_can_send_a_demo_token_and_explains_a_rejected_one(page):
+    script = blocks(page.text, "script")[0]
+    # The token goes in a header (never the URL), is kept only for the tab (sessionStorage, not
+    # localStorage), and a 401 gets its own message: a wrong token is never silently downgraded.
+    assert "X-Demo-Token" in script
+    assert "sessionStorage" in script and "localStorage" not in script
+    assert "401" in script
+    assert 'type="password"' in page.text and 'autocomplete="off"' in page.text
+
+
 def test_the_page_is_not_part_of_the_api_schema(page):
     # GET / is a page, not an API call: it stays out of /openapi.json.
     assert "/" not in TestClient(app).get("/openapi.json").json()["paths"]
