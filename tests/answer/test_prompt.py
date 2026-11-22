@@ -76,3 +76,56 @@ def test_gpt_oss_style_citations_are_accepted_and_shown_as_square_brackets():
 
 def test_unknown_numbers_in_fullwidth_brackets_are_dropped_too():
     assert parse_answer("Restart it【9】.", k=3).reason == "uncited"
+
+
+# --- characters that only LOOK like ASCII (found live on 2026-11-23, issue #39) -----------------
+#
+# A live answer told the on-call engineer to edit a file whose name had U+2011 non-breaking
+# hyphens in it: pasted into a shell, that file does not exist. The saved answers were already
+# cleaned at build time; live answers must be too, because the model does it on its own. The
+# characters are written as chr() here on purpose: a non-breaking hyphen looks exactly like "-".
+
+NBH = chr(0x2011)  # non-breaking hyphen
+HY = chr(0x2010)  # hyphen
+NBSP = chr(0x00A0)  # no-break space
+RSQ = chr(0x2019)  # right single quotation mark (the model's apostrophe)
+LDQ, RDQ = chr(0x201C), chr(0x201D)  # curly double quotes
+DQ = chr(34)  # a plain double quote
+NL = chr(10)
+
+
+def test_a_file_path_with_non_breaking_hyphens_is_made_pasteable():
+    path = f"apps/link{NBH}shortener/overlays/k3s/link{NBH}tokens{NBH}sealedsecret.yaml"
+    p = parse_answer(f"Edit `{path}` [1].", k=3)
+    assert p.kind == "live"
+    assert "apps/link-shortener/overlays/k3s/link-tokens-sealedsecret.yaml" in p.answer
+    assert NBH not in p.answer
+
+
+def test_a_command_in_a_code_block_is_made_pasteable():
+    fence = "`" * 3
+    text = "Run:" + NL + NL + fence + "bash" + NL
+    text += f"kubectl get pods {HY}n link{NBH}shortener" + NL + fence + "[1]"
+    assert "kubectl get pods -n link-shortener" in parse_answer(text, k=3).answer
+
+
+def test_curly_quotes_and_special_spaces_are_replaced_in_prose_too():
+    text = f"Argo CD{RSQ}s self{NBH}heal reverts {LDQ}manual{RDQ} edits{NBSP}at once [1]."
+    expected = "Argo CD's self-heal reverts " + DQ + "manual" + DQ + " edits at once [1]."
+    assert parse_answer(text, k=3).answer == expected
+
+
+def test_cleaning_does_not_disturb_citations_or_refusals():
+    # The fullwidth brackets are NOT lookalikes to replace here: they are parsed as citations.
+    open_b, close_b = chr(0x3010), chr(0x3011)
+    assert parse_answer(f"Revert it{NBH}now{open_b}1{close_b}.", k=3).cited == [1]
+    assert parse_answer(f"I don{RSQ}t know.", k=3).reason == "model"
+
+
+def test_the_saved_answer_build_and_live_answers_share_one_table():
+    # One list of lookalikes, so the two cannot drift apart.
+    from app.answer.text import LOOKALIKES, clean
+    from app.saved import build
+
+    assert clean(f"a{NBH}b") == "a-b"
+    assert build.clean is clean and LOOKALIKES

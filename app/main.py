@@ -16,11 +16,13 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Header, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from app.answer.service import Answerer, Search, Unavailable
+from app.budget.budget import PUBLIC
+from app.budget.tokens import DemoTokens
 from app.page import load_page
 from app.saved.store import SavedAnswers, load_saved
 
@@ -73,6 +75,11 @@ def _load_saved() -> SavedAnswers | None:
 
 SAVED = _load_saved()
 
+# Demo tokens (ADR 0003): a mounted directory of token hashes, read on every lookup so a token added
+# or revoked works within about a minute with no restart. Unset or empty means no tokens exist,
+# and a request that presents one is refused (401), never treated as the public.
+TOKENS = DemoTokens(os.environ.get("DEMO_TOKEN_DIR"))
+
 
 def open_pool(conninfo: str = "", *, timeout: float = DB_POOL_TIMEOUT):
     """The app's small Postgres pool. A caller that cannot get a connection within `timeout`
@@ -99,9 +106,14 @@ def build_answerer() -> tuple[Answerer, object]:
     import httpx
 
     from app.answer.llm import TIMEOUT, LLMSettings, chat
+    from app.budget.budget import Budget, BudgetSettings
+    from app.budget.ledger import PgLedger
     from app.embed.model import OnnxEmbedder
 
     settings = LLMSettings.from_env()
+    # A bad budget setting stops the answerer (/ask says "not configured") instead of being
+    # replaced by a default; CI checks the same values on the ConfigMap.
+    budget_settings = BudgetSettings.from_env()
     embedder = OnnxEmbedder()
     pool = open_pool(os.environ.get("DATABASE_URL", ""))
     http = httpx.Client(timeout=TIMEOUT)
@@ -112,8 +124,15 @@ def build_answerer() -> tuple[Answerer, object]:
         lambda messages: chat(settings, messages, client=http),
         model=settings.model,
         saved=SAVED,
+        budget=Budget(PgLedger(pool), budget_settings),
     )
-    log.info("answerer ready: provider=%s model=%s", settings.provider, settings.model)
+    log.info(
+        "answerer ready: provider=%s model=%s budget=%d tokens/day, public %d%%",
+        settings.provider,
+        settings.model,
+        budget_settings.total,
+        budget_settings.public_pct,
+    )
     return answerer, (pool, http)
 
 
@@ -175,9 +194,28 @@ def saved():
 
 
 @app.post("/ask")
-def ask(body: Question):
+def ask(body: Question, x_demo_token: str | None = Header(default=None)):
     # A sync endpoint: FastAPI runs it in its thread pool, so a slow model call does not block
     # the event loop, and the Answerer's own limit of two concurrent calls applies.
+    #
+    # Who is asking (ADR 0003): "public", or the NAME of a demo token. A blank header is the
+    # public. A token that matches none is a 401 and never a silent downgrade to the public budget:
+    # someone who was given a token should be told it does not work. A 401 is the client's
+    # mistake, so it is outside the availability target, like a 422.
+    who = PUBLIC
+    if x_demo_token is not None and x_demo_token.strip():
+        name = TOKENS.identify(x_demo_token)
+        if name is None:
+            logging.getLogger("oncall.ask").info("ask kind=unauthorized reason=unknown_token")
+            return JSONResponse(
+                {
+                    "kind": "unauthorized",
+                    "notice": "That demo token is not recognised. Check it, or clear the box to"
+                    " ask as a visitor.",
+                },
+                status_code=401,
+            )
+        who = name
     answerer: Answerer | None = app.state.answerer
     if answerer is None:
         return JSONResponse(
@@ -189,7 +227,7 @@ def ask(body: Question):
             status_code=503,
         )
     try:
-        result = answerer.ask(body.question.strip())
+        result = answerer.ask(body.question.strip(), who)
     except Unavailable as e:
         return JSONResponse(
             {"kind": "unavailable", "reason": e.reason, "notice": e.notice}, status_code=503

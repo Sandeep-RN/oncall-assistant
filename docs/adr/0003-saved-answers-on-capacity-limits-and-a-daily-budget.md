@@ -1,8 +1,9 @@
 # 0003. Saved answers when the free tier is at its limit, and a daily budget kept in Postgres
 
 Status: Accepted (2026-11-22). Replaces one part of [ADR 0002](0002-cite-or-refuse-one-openai-compatible-call.md):
-a 429 or a busy server no longer answers 503. Points 5 to 7 are decided here and built in PR C of
-issue #6; points 1 to 4 are built in PR B.
+a 429 or a busy server no longer answers 503. Points 1 to 4 were built in PR B and points 5 to 7 in
+PR C of issue #6 (2026-11-23); the platform side (the ledger table, its grant, the settings and the
+token mount) is gitops PR #85.
 
 ## Context
 - The public demo runs on Groq's free tier: about 3 live answers a minute and 200K tokens a day
@@ -45,9 +46,13 @@ issue #6; points 1 to 4 are built in PR B.
    because tokens, not requests, run out first. The public share is 70% of 200K; the rest is for
    demo-token holders. Both numbers are settings. The check comes before the embedding, so a spent
    budget costs nothing. The count is added after the call, so a few answers can overshoot; the
-   provider's own 429 is the hard stop. The day is a UTC day unless the provider's docs say
-   otherwise (to be checked before PR C). If the counter cannot be read or written, the answer goes
-   ahead and the error is logged.
+   provider's own 429 is the hard stop. The day is a UTC calendar day, an approximation: checked
+   2026-11-23, Groq documents no reset time for its daily token limit, and its daily-request
+   header is a countdown (`x-ratelimit-reset-requests: 2m59.56s`), so its window looks rolling. A
+   reply without usage figures counts as 2,500 tokens, and a failed call counts nothing. If the
+   ledger is broken (no table, no grant) the answer goes ahead and the error is logged
+   (`budget_error`); if the database is unreachable the question fails at once with 503, because
+   retrieval would fail too and a second pool wait would break the 8 s target.
 6. **One writable table (PR C).** `llm_usage (day, who, tokens, calls)`, created by the role Job;
    the app role gets `SELECT, INSERT, UPDATE` on that table only. The passages stay read-only, and
    the role's read-only default stays on: the app writes only inside an explicit
@@ -55,10 +60,15 @@ issue #6; points 1 to 4 are built in PR B.
    (the same process would hold both passwords) and a counter in memory (every deploy would hand
    out a fresh day's budget).
 7. **Demo token (PR C).** A request header `X-Demo-Token`. The cluster holds only the SHA-256 of
-   each token, with a name (a Secret). The server hashes the presented token and compares in
-   constant time; plain SHA-256 is enough for 32 random bytes. A wrong token is a 401, never a
-   silent downgrade. A token lifts only the public share: not the provider's per-minute limit and
-   not the edge's per-client limit. Logs carry the token's name, never the token.
+   each token, with a name: one file per token in a mounted Secret directory (`DEMO_TOKEN_DIR`),
+   the file name being the name and its content the lowercase hex hash. The directory is read on
+   every lookup, so a token added or revoked works within about a minute with no restart (the
+   kubelet refreshes the mount). The server hashes the presented token and compares it with every
+   stored hash in constant time; plain SHA-256 is enough for 32 random bytes. A wrong token is a
+   401, never a silent downgrade, and a 401 is the client's mistake, outside the availability
+   target like a 422. A token lifts only the public share: not the provider's per-minute limit and
+   not the edge's per-client limit. Logs carry the token's name (`who=`), never the token or its
+   hash.
 
 ## Consequences
 - A saved answer can go stale when the documents change. The drift test catches a moved corpus pin,
