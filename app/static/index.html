@@ -147,6 +147,17 @@
     status.className = kind || "";
   }
 
+  // The edge's 429 carries `Retry-After` in seconds (checked live 2026-11-23: 15). Say how long
+  // instead of "a minute". Only a plain whole number of seconds is believed, and only up to an hour:
+  // anything else (missing, a date, nonsense) keeps the general wording.
+  function tooFastMessage(res) {
+    const raw = (res.headers.get("Retry-After") || "").trim();
+    const seconds = /^[0-9]{1,4}$/.test(raw) ? parseInt(raw, 10) : 0;
+    if (seconds < 1 || seconds > 3600) return MESSAGES[429];
+    return "You are asking too fast. Please wait " + seconds + (seconds === 1 ? " second" : " seconds") +
+      " and try again.";
+  }
+
   // Returns {answer}, {saved} or {error}; never throws.
   async function ask(question) {
     const controller = new AbortController();
@@ -172,6 +183,7 @@
       if (res.status === 503 && body && typeof body.notice === "string" && body.notice) {
         return { error: body.notice, offerSaved: true };
       }
+      if (res.status === 429) return { error: tooFastMessage(res) };
       return { error: MESSAGES[res.status] || GENERIC, offerSaved: res.status === 503 };
     } catch (e) {
       if (e && e.name === "AbortError") {
