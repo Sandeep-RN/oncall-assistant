@@ -16,7 +16,7 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
 
@@ -140,8 +140,16 @@ class Question(BaseModel):
     question: str = Field(min_length=3, max_length=500)
 
 
-@app.get("/", include_in_schema=False)
-def page() -> HTMLResponse:
+@app.api_route("/", methods=["GET", "HEAD"], include_in_schema=False)
+def page(request: Request) -> Response:
+    if request.method == "HEAD":
+        # Same headers as GET and no body (RFC 9110); Content-Length says how long GET's body is.
+        # Link previews and uptime checks use HEAD, and a 405 looked like a broken site.
+        length = str(len(PAGE.html.encode()))
+        return Response(
+            headers={**PAGE.headers, "Content-Length": length},
+            media_type="text/html; charset=utf-8",
+        )
     return HTMLResponse(PAGE.html, headers=PAGE.headers)
 
 
