@@ -24,6 +24,7 @@ from datetime import date
 from pathlib import Path
 
 from app.answer.service import Answer
+from app.answer.text import clean
 from app.saved.store import SAVED_FILE, load_saved
 
 # slug -> id of the question in evals/questions.jsonl. Chosen from answerable questions whose right
@@ -36,22 +37,6 @@ SAVED_QUESTIONS = {
     "biggest-availability-limit": "A20",
     "assistant-memory-cap": "A27",
 }
-
-
-# Characters a model writes that LOOK like ASCII but break a copy-paste into a shell or a search.
-# Found 2026-11-22: gpt-oss-120b wrote a file path with U+2011 non-breaking hyphens.
-LOOKALIKES = str.maketrans(
-    {
-        "‐": "-",  # hyphen
-        "‑": "-",  # non-breaking hyphen
-        " ": " ",  # no-break space
-        " ": " ",  # narrow no-break space
-        "‘": "'",
-        "’": "'",
-        "“": '"',
-        "”": '"',
-    }
-)
 
 
 class BuildError(RuntimeError):
@@ -80,7 +65,7 @@ def build_saved(
             {
                 "id": slug,
                 "question": question,
-                "answer": result.answer.translate(LOOKALIKES),
+                "answer": clean(result.answer),
                 "citations": result.citations,
             }
         )
