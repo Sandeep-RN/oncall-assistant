@@ -116,6 +116,29 @@ def test_the_page_shows_saved_answers_with_a_clear_label(page):
     assert "not generated for your question" in page.text.lower()
 
 
+def test_the_page_renders_markdown_with_elements_it_builds_not_with_html(page):
+    # Found 2026-11-23 in the live page: the model's answers (and the saved ones) use fenced code
+    # blocks, `inline code` and **bold**, and the page showed the raw ``` and ** characters. They
+    # are drawn with createElement + textContent; no HTML is parsed (the test above forbids it).
+    script = blocks(page.text, "script")[0]
+    for needle in (
+        'createElement("pre")',
+        'createElement("code")',
+        'createElement("strong")',
+        "```",
+    ):
+        assert needle in script, needle
+
+
+def test_both_the_live_answer_and_the_saved_answers_go_through_the_renderer(page):
+    script = blocks(page.text, "script")[0]
+    # A live answer (#answer) and each saved answer are rendered by the same function, so a code
+    # block looks the same in both. Neither may be set with textContent directly any more.
+    assert "answer.textContent" not in script
+    assert "text.textContent" not in script
+    assert script.count("rich(") >= 3  # the definition and two calls
+
+
 def test_the_page_is_not_part_of_the_api_schema(page):
     # GET / is a page, not an API call: it stays out of /openapi.json.
     assert "/" not in TestClient(app).get("/openapi.json").json()["paths"]
