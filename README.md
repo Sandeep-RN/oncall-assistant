@@ -15,8 +15,9 @@ deployed at https://ask.sandeeprn.in through the platform's GitOps repository. D
 local embeddings and the pgvector index ([ADR 0001](docs/adr/0001-local-onnx-embeddings-on-python-314.md)),
 `POST /ask` with cited answers or a refusal ([ADR 0002](docs/adr/0002-cite-or-refuse-one-openai-compatible-call.md)),
 the retrieval eval (39 questions, 89% right passage in the top 5), the container image on GHCR,
-and a one-file question page at `/` that shows every failure the edge or the app can send.
-Next (#6): saved answers when the free model tier is busy, the daily budget and the demo token.
+a one-file question page at `/` that shows every failure the edge or the app can send, and saved
+answers when the free model tier is at its limit ([ADR 0003](docs/adr/0003-saved-answers-on-capacity-limits-and-a-daily-budget.md)).
+Next (#6): the daily budget and the demo token.
 
 - [Customer brief](docs/customer-brief.md): problem, users, constraints, success criteria, delivery
 - [Glossary](GLOSSARY.md): the terms used in this repo and its issues
@@ -98,10 +99,26 @@ citing them as `[n]`, or says "I don't know" ([ADR 0002](docs/adr/0002-cite-or-r
 |---|---|
 | 200 `kind: live` | an answer with `citations` (URL at the pinned commit, repo, path, section) |
 | 200 `kind: refusal` | the documents do not answer it (`reason: model`), or the model cited nothing (`uncited`) |
-| 503 `kind: unavailable` | provider rate limit, timeout or error, too many questions at once, or not configured; `notice` says which |
+| 200 `kind: saved` | a capacity limit (the provider's 429, or two answers already running): the `saved` answers, and `match` says which one is the visitor's own question, if any ([ADR 0003](docs/adr/0003-saved-answers-on-capacity-limits-and-a-daily-budget.md)) |
+| 503 `kind: unavailable` | a fault: timeout, provider error, bad reply, database unavailable, or not configured; `notice` says which |
 
-Every response carries `timings_ms` and `tokens`. Logs keep a hash and the length of the question,
-never its text.
+Every live answer carries `timings_ms` and `tokens`. Logs keep a hash and the length of the question,
+never its text. `GET /saved` lists the saved answers (no database or key needed) and `GET /` is the
+question page.
+
+## Saved answers
+
+Five pre-written answers in `app/saved/answers.json`, shown, clearly labelled, when the free model
+tier is at its limit. They are drafted by the real pipeline over the pinned corpus, then read by a
+person next to the passages they cite; the file's `note` says what was trimmed. Rebuild after the
+corpus pin moves (a test fails until you do), then re-review the diff:
+
+```bash
+PGHOST=localhost PGPORT=5433 PGUSER=postgres PGDATABASE=postgres \
+  .venv/Scripts/python -m app.index --lock corpus-lock.json   # the pinned corpus, not each repo's head
+LLM_PROVIDER=kodekey PGHOST=localhost PGPORT=5433 PGUSER=postgres PGDATABASE=postgres \
+  .venv/Scripts/python -m app.saved.build
+```
 
 ```bash
 # The development key from .env (git-ignored), laptop only; the cluster uses Groq.

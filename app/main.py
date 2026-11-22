@@ -1,6 +1,7 @@
 """On-call assistant API.
 
 - GET  /         the page: one static file with a question box (issue #6, app/page.py).
+- GET  /saved    the saved answers (ADR 0003): from a file in the image, nothing else needed.
 - GET  /healthz  liveness only: never touches the database, the model files or the provider.
 - POST /ask      a cited answer or a refusal from the team's documents (ADR 0002).
 
@@ -21,6 +22,7 @@ from pydantic import BaseModel, Field
 
 from app.answer.service import Answerer, Search, Unavailable
 from app.page import load_page
+from app.saved.store import SavedAnswers, load_saved
 
 log = logging.getLogger("oncall")
 
@@ -52,6 +54,24 @@ configure_logging()
 # Read at import: a missing or unreadable page file is a broken build and should fail here, not
 # on the first visitor. The image smoke test in CI requests it.
 PAGE = load_page()
+
+
+def _load_saved() -> SavedAnswers | None:
+    """The saved answers, or None if the file is missing or invalid.
+
+    Unlike the page, a bad file does not stop the app: saved answers are a degradation aid, and the
+    app must still start (the build script that REGENERATES the file imports this module, so a
+    hard failure here would make a broken file impossible to rebuild). Without them a capacity
+    limit is a plain 503. Tests and the image smoke test stop a bad file from shipping.
+    """
+    try:
+        return load_saved()
+    except (OSError, ValueError) as e:
+        log.error("saved answers not available: %s: %s", type(e).__name__, e)
+        return None
+
+
+SAVED = _load_saved()
 
 
 def open_pool(conninfo: str = "", *, timeout: float = DB_POOL_TIMEOUT):
@@ -91,6 +111,7 @@ def build_answerer() -> tuple[Answerer, object]:
         pool_search(pool),
         lambda messages: chat(settings, messages, client=http),
         model=settings.model,
+        saved=SAVED,
     )
     log.info("answerer ready: provider=%s model=%s", settings.provider, settings.model)
     return answerer, (pool, http)
@@ -127,6 +148,22 @@ def page() -> HTMLResponse:
 @app.get("/healthz")
 def healthz() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/saved")
+def saved():
+    """The saved answers, for the page to show after a 503 (a fault) as well. Needs no database,
+    no model and no provider."""
+    if SAVED is None:
+        return JSONResponse(
+            {
+                "kind": "unavailable",
+                "reason": "not_configured",
+                "notice": "There are no saved answers on this server.",
+            },
+            status_code=503,
+        )
+    return {"saved": SAVED.all()}
 
 
 @app.post("/ask")

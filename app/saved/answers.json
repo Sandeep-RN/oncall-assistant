@@ -1,0 +1,91 @@
+{
+  "generated": "2026-11-22",
+  "model": "gpt-oss-120b",
+  "note": "Drafted by `python -m app.saved.build` over the pinned corpus, then reviewed by hand. Two drafts were trimmed because they claimed more than their cited passage says (no-point-in-time-restore: 'you can only restore from the available dump files'; assistant-memory-cap: a sentence saying pods request the same as their limits, which is wrong for CPU). Rebuilding overwrites this file: re-review the diff.",
+  "answers": [
+    {
+      "id": "roll-back-a-deploy",
+      "question": "Errors started right after a deploy. How do I roll back?",
+      "answer": "To roll back, revert the tag-bump pull request in the GitOps repository; Argo CD will then redeploy the previous image automatically[1]. Do not use `kubectl set image` or `kubectl rollout undo`, because Argo CD would immediately revert those changes (self-heal)[1].",
+      "citations": [
+        {
+          "n": 1,
+          "url": "https://github.com/Sandeep-RN/oci-k8s-gitops-demo/blob/2d701252136707eb17d36f9a7535cd2ec5c43206/docs/runbooks/slo-redirect-availability.md#recent-deploy-500",
+          "repo": "Sandeep-RN/oci-k8s-gitops-demo",
+          "path": "docs/runbooks/slo-redirect-availability.md",
+          "title": "Runbook: redirect SLO burn-rate alerts > Recent deploy (500)"
+        }
+      ]
+    },
+    {
+      "id": "revoke-a-token",
+      "question": "A link-creation token leaked. How do I revoke it?",
+      "answer": "1. On a new branch from the latest `origin/main`, open the SealedSecret file  \n   `apps/link-shortener/overlays/k3s/link-tokens-sealedsecret.yaml` and delete the line for the leaked token under `spec.encryptedData` (leave the other lines untouched) [1].  \n2. Open a PR, let the CI `validate` run, and merge it; then check each layer until no pod lists the token [1].  \n3. Verify revocation by running the same `curl` that previously succeeded; it should now return **401** while other valid tokens still return **201** [1].  \n4. Finally, delete the token's value from the password manager [1].  \n\n(Adding or rotating tokens is done with `scripts/seal-link-tokens.sh`, and revoking is simply deleting the key as described in the script header) [4].",
+      "citations": [
+        {
+          "n": 1,
+          "url": "https://github.com/Sandeep-RN/oci-k8s-gitops-demo/blob/2d701252136707eb17d36f9a7535cd2ec5c43206/docs/runbooks/edge.md#revoke-a-link-creation-token",
+          "repo": "Sandeep-RN/oci-k8s-gitops-demo",
+          "path": "docs/runbooks/edge.md",
+          "title": "Runbook: the edge (certificate, Cloudflare tokens, link-creation tokens) > Revoke a link-creation token"
+        },
+        {
+          "n": 4,
+          "url": "https://github.com/Sandeep-RN/oci-k8s-gitops-demo-gitops/blob/6947c6d160da26ec2be75b4f86b7d7f868196395/README.md#secrets",
+          "repo": "Sandeep-RN/oci-k8s-gitops-demo-gitops",
+          "path": "README.md",
+          "title": "oci-k8s-gitops-demo-gitops > Secrets"
+        }
+      ]
+    },
+    {
+      "id": "no-point-in-time-restore",
+      "question": "Can I restore Postgres to a point in time?",
+      "answer": "No. The backups are logical (`pg_dump`) and there is no point-in-time recovery capability[2].",
+      "citations": [
+        {
+          "n": 2,
+          "url": "https://github.com/Sandeep-RN/oci-k8s-gitops-demo/blob/2d701252136707eb17d36f9a7535cd2ec5c43206/docs/runbooks/postgres-backup-restore.md#notes",
+          "repo": "Sandeep-RN/oci-k8s-gitops-demo",
+          "path": "docs/runbooks/postgres-backup-restore.md",
+          "title": "Runbook: Postgres backups and restore > Notes"
+        }
+      ]
+    },
+    {
+      "id": "biggest-availability-limit",
+      "question": "What is the biggest availability limit of this platform?",
+      "answer": "The platform's biggest availability limit is that it runs on a single node, so any node-level event—such as a reboot, a k3s upgrade, or a Traefik restart—causes an outage [2][1].",
+      "citations": [
+        {
+          "n": 2,
+          "url": "https://github.com/Sandeep-RN/oci-k8s-gitops-demo/blob/2d701252136707eb17d36f9a7535cd2ec5c43206/docs/roadmap.md#known-limits",
+          "repo": "Sandeep-RN/oci-k8s-gitops-demo",
+          "path": "docs/roadmap.md",
+          "title": "Known limits and what comes next > Known limits"
+        },
+        {
+          "n": 1,
+          "url": "https://github.com/Sandeep-RN/oci-k8s-gitops-demo/blob/2d701252136707eb17d36f9a7535cd2ec5c43206/docs/architecture.md#5-the-cluster-k3s-on-one-always-free-node",
+          "repo": "Sandeep-RN/oci-k8s-gitops-demo",
+          "path": "docs/architecture.md",
+          "title": "Architecture > 5. The cluster: k3s on one Always Free node"
+        }
+      ]
+    },
+    {
+      "id": "assistant-memory-cap",
+      "question": "How much memory and CPU may the second application (the assistant) use?",
+      "answer": "The assistant's namespace is limited by a ResourceQuota to **1 GiB of memory** and **1 CPU of limits** [1].",
+      "citations": [
+        {
+          "n": 1,
+          "url": "https://github.com/Sandeep-RN/oci-k8s-gitops-demo/blob/2d701252136707eb17d36f9a7535cd2ec5c43206/docs/adr/0025-second-application-on-the-node-inside-a-hard-cap.md#decision",
+          "repo": "Sandeep-RN/oci-k8s-gitops-demo",
+          "path": "docs/adr/0025-second-application-on-the-node-inside-a-hard-cap.md",
+          "title": "0025. A second application on the node, inside a hard resource cap > Decision"
+        }
+      ]
+    }
+  ]
+}

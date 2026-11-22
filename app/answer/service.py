@@ -20,12 +20,14 @@ from app.answer.llm import Completion, LLMError
 from app.answer.prompt import build_messages, parse_answer
 from app.embed.model import Embedder
 from app.index.store import Hit
+from app.saved.store import SavedAnswers
 
 log = logging.getLogger("oncall.ask")
 
 Search = Callable[[np.ndarray, int], Sequence[Hit]]
 ModelCall = Callable[[list[dict[str, str]]], Completion]
 
+# What a visitor reads when there is NO live answer and nothing saved to show (503, a fault).
 NOTICES = {
     "rate_limited": "The free model tier is busy right now. Please try again in a minute.",
     "timeout": "The model did not answer in time. Please try again.",
@@ -33,6 +35,20 @@ NOTICES = {
     "index_unavailable": "The document index is not available right now. Please try again later.",
 }
 DEFAULT_NOTICE = "Live answers are unavailable right now. Please try again later."
+
+# Capacity limits (ADR 0003): the free tier doing what it was always going to do. These answer
+# 200 with saved answers, which count as a good response. Everything else is a fault and stays
+# 503, so the availability target can still burn. "budget_spent" joins this set with the budget.
+CAPACITY_REASONS = frozenset({"rate_limited", "busy"})
+SAVED_NOTICES = {
+    "rate_limited": "The free model tier is at its limit for this minute, so there is no live"
+    " answer right now. Here are saved answers to common questions.",
+    "busy": "Too many questions are being answered at once, so there is no live answer right"
+    " now. Here are saved answers to common questions.",
+}
+DEFAULT_SAVED_NOTICE = (
+    "Live answers are paused right now. Here are saved answers to common questions."
+)
 
 
 class Unavailable(RuntimeError):
@@ -53,6 +69,18 @@ class Answer:
     tokens: dict[str, int] = field(default_factory=dict)
 
 
+@dataclass
+class SavedReply:
+    """No live answer because of a capacity limit: the saved answers, and which one (if any) is
+    the visitor's own question. The page labels them as saved."""
+
+    reason: str
+    notice: str
+    match: str | None
+    saved: list[dict]
+    kind: str = "saved"
+
+
 def question_hash(question: str) -> str:
     """What the logs keep instead of the question (the brief: questions are not stored)."""
     return hashlib.sha256(question.encode()).hexdigest()[:12]
@@ -68,21 +96,36 @@ class Answerer:
         model: str,
         k: int = 5,
         max_concurrent: int = 2,
+        saved: SavedAnswers | None = None,
     ):
         self.embedder, self.search, self.llm, self.model, self.k = embedder, search, llm, model, k
+        # Without saved answers a capacity limit is a plain 503, as in ADR 0002.
+        self.saved = saved
         # Bounds memory in a 320Mi pod and calls against a 30-a-minute provider limit.
         self._slots = threading.BoundedSemaphore(max_concurrent)
 
-    def ask(self, question: str) -> Answer:
+    def ask(self, question: str) -> Answer | SavedReply:
         if not self._slots.acquire(blocking=False):
-            self._log(question, "unavailable", reason="busy")
-            raise Unavailable("busy")
+            return self._capacity(question, "busy")
         try:
             return self._ask(question)
         finally:
             self._slots.release()
 
-    def _ask(self, question: str) -> Answer:
+    def _capacity(self, question: str, reason: str) -> SavedReply:
+        """A capacity limit: the saved answers (200), or Unavailable (503) if there are none."""
+        if self.saved is None:
+            self._log(question, "unavailable", reason=reason)
+            raise Unavailable(reason)
+        self._log(question, "saved", reason=reason)
+        return SavedReply(
+            reason=reason,
+            notice=SAVED_NOTICES.get(reason, DEFAULT_SAVED_NOTICE),
+            match=self.saved.match(question),
+            saved=self.saved.all(),
+        )
+
+    def _ask(self, question: str) -> Answer | SavedReply:
         t0 = time.perf_counter()
         vector = self.embedder.embed_query(question)
         try:
@@ -108,6 +151,8 @@ class Answerer:
         try:
             completion = self.llm(build_messages(question, hits))
         except LLMError as e:
+            if e.reason in CAPACITY_REASONS:
+                return self._capacity(question, e.reason)
             self._log(question, "unavailable", reason=e.reason)
             raise Unavailable(e.reason) from e
         timings["generate"] = round((time.perf_counter() - t1) * 1000)

@@ -48,6 +48,13 @@
   #sources { margin: .3rem 0 0; padding-left: 1.4rem; }
   #sources li { margin-bottom: .25rem; }
   a { color: var(--accent); }
+  #status.notice { color: var(--fg); background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--accent); padding: .6rem .8rem; border-radius: .5rem; }
+  button.link { padding: 0; font-weight: 400; color: var(--accent); background: none; text-decoration: underline; }
+  #saved[hidden] { display: none; }
+  .saved-item { background: var(--card); border: 1px solid var(--line); border-radius: .5rem; padding: .8rem 1.2rem; margin-bottom: 1rem; }
+  .saved-item.match { border-left: 4px solid var(--accent); }
+  .saved-item h3 { font-size: 1rem; margin: .3rem 0; }
+  .saved-text { white-space: pre-wrap; margin: .4rem 0 .6rem; }
   footer { margin-top: 2rem; }
 </style>
 </head>
@@ -70,6 +77,13 @@
   </form>
 
   <div id="status" role="status" aria-live="polite"></div>
+  <p class="small"><button id="show-saved" type="button" class="link">See saved example answers</button>
+  (written earlier; shown automatically when live answers are paused)</p>
+
+  <section id="saved" hidden aria-live="polite">
+    <h2>Saved answers</h2>
+    <div id="saved-list"></div>
+  </section>
 
   <section id="result" hidden aria-live="polite">
     <p id="kind"></p>
@@ -105,6 +119,8 @@
     503: "Live answers are unavailable right now. Please try again later.",
   };
   const GENERIC = "Something went wrong. Please try again.";
+  // The brief counts a saved answer as a good response only if it is clearly labelled as one.
+  const SAVED_LABEL = "Saved answer, written earlier, not generated for your question";
 
   const form = document.getElementById("ask-form");
   const box = document.getElementById("question");
@@ -116,13 +132,17 @@
   const answer = document.getElementById("answer");
   const sources = document.getElementById("sources");
   const meta = document.getElementById("meta");
+  const savedSection = document.getElementById("saved");
+  const savedList = document.getElementById("saved-list");
+  const showSaved = document.getElementById("show-saved");
 
-  function setStatus(text, isError) {
+  // kind: "error" (a problem), "notice" (information, e.g. live answers are paused) or "".
+  function setStatus(text, kind) {
     status.textContent = text;
-    status.className = isError ? "error" : "";
+    status.className = kind || "";
   }
 
-  // Returns {answer} or {error}; never throws.
+  // Returns {answer}, {saved} or {error}; never throws.
   async function ask(question) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -140,10 +160,14 @@
       if (res.ok && body && (body.kind === "live" || body.kind === "refusal")) {
         return { answer: body };
       }
-      if (res.status === 503 && body && typeof body.notice === "string" && body.notice) {
-        return { error: body.notice };
+      // A capacity limit (ADR 0003): the server sends the saved answers with the reply.
+      if (res.ok && body && body.kind === "saved" && Array.isArray(body.saved)) {
+        return { saved: body };
       }
-      return { error: MESSAGES[res.status] || GENERIC };
+      if (res.status === 503 && body && typeof body.notice === "string" && body.notice) {
+        return { error: body.notice, offerSaved: true };
+      }
+      return { error: MESSAGES[res.status] || GENERIC, offerSaved: res.status === 503 };
     } catch (e) {
       if (e && e.name === "AbortError") {
         return { error: "The assistant took too long to answer. Please try again." };
@@ -183,24 +207,78 @@
     result.hidden = false;
   }
 
+  // The saved answers, one block each. The one that equals the visitor's own question (the server
+  // says which) comes first. Same rules as a live answer: text only, links only to our repos.
+  function renderSaved(items, matchId) {
+    const ordered = items.filter((i) => i.id === matchId).concat(items.filter((i) => i.id !== matchId));
+    savedList.replaceChildren(...ordered.map((item) => {
+      const block = document.createElement("article");
+      block.className = "saved-item" + (item.id === matchId ? " match" : "");
+      const label = document.createElement("p");
+      label.className = "small";
+      label.textContent = SAVED_LABEL + (item.id === matchId ? " (this is your question)" : "");
+      const question = document.createElement("h3");
+      question.textContent = String(item.question);
+      const text = document.createElement("p");
+      text.className = "saved-text";
+      text.textContent = String(item.answer);
+      const list = document.createElement("ol");
+      list.replaceChildren(...(item.citations || []).map(citation));
+      block.append(label, question, text, list);
+      return block;
+    }));
+    savedSection.hidden = false;
+  }
+
+  // GET /saved needs no database, model or provider, so it works even when /ask does not.
+  async function loadSaved(matchId) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+    try {
+      const res = await fetch("/saved", { signal: controller.signal });
+      const body = res.ok ? await res.json() : null;
+      if (!body || !Array.isArray(body.saved)) return false;
+      renderSaved(body.saved, matchId);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   box.addEventListener("input", () => { count.textContent = box.value.length + " / 500"; });
+
+  showSaved.addEventListener("click", async () => {
+    result.hidden = true;
+    const ok = await loadSaved(null);
+    setStatus(ok ? "" : "The saved answers could not be loaded. Please try again.", ok ? "" : "error");
+  });
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     const question = box.value.trim();
     result.hidden = true;
+    savedSection.hidden = true;
     if (question.length < 3 || question.length > 500) {
-      setStatus(MESSAGES[422], true); // the same words the server uses, without a request
+      setStatus(MESSAGES[422], "error"); // the same words the server uses, without a request
       return;
     }
     button.disabled = true;
-    setStatus("Searching the documents and asking the model...", false);
+    setStatus("Searching the documents and asking the model...", "");
     const outcome = await ask(question);
     button.disabled = false;
-    if (outcome.error) {
-      setStatus(outcome.error, true);
+    if (outcome.saved) {
+      setStatus(String(outcome.saved.notice || ""), "notice");
+      renderSaved(outcome.saved.saved, outcome.saved.match);
+    } else if (outcome.error) {
+      setStatus(outcome.error, "error");
+      // A fault (503): there is no live answer, but the saved ones are still a click away.
+      if (outcome.offerSaved && (await loadSaved(null))) {
+        setStatus(outcome.error + " Saved answers to common questions are shown below.", "error");
+      }
     } else {
-      setStatus("", false);
+      setStatus("", "");
       render(outcome.answer);
     }
   });

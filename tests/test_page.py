@@ -97,6 +97,15 @@ def test_the_page_says_where_the_question_goes(page):
     assert "groq" in text and "not stored" in text
 
 
+def test_the_page_shows_saved_answers_with_a_clear_label(page):
+    script = blocks(page.text, "script")[0]
+    # `kind: "saved"` from /ask (a capacity limit) and the list from /saved (after a 503).
+    assert '"saved"' in script and '"/saved"' in script
+    # The brief: a saved answer counts as good only if it is clearly labelled as one.
+    assert "saved answer" in page.text.lower()
+    assert "not generated for your question" in page.text.lower()
+
+
 def test_the_page_is_not_part_of_the_api_schema(page):
     # GET / is a page, not an API call: it stays out of /openapi.json.
     assert "/" not in TestClient(app).get("/openapi.json").json()["paths"]

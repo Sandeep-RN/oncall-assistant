@@ -241,6 +241,14 @@ jobs:
           grep -qi "^content-security-policy: default-src 'none'" /tmp/page.headers \
             || fail "GET / has no Content-Security-Policy: $(cat /tmp/page.headers)"
           echo "GET / serves the page with its Content-Security-Policy"
+          # The five saved answers ship in the image and load without a database or a key
+          # (ADR 0003). A missing or invalid file switches the feature off instead of stopping
+          # the app, so this check is what stops a broken file from shipping.
+          curl -fsS -o /tmp/saved.json http://127.0.0.1:8080/saved \
+            || fail "GET /saved did not answer (is app/saved/answers.json valid?)"
+          [ "$(grep -o '"id"' /tmp/saved.json | wc -l)" -eq 5 ] \
+            || fail "expected 5 saved answers, got: $(head -c 300 /tmp/saved.json)"
+          echo "GET /saved lists 5 saved answers"
 
       - name: Log in to GHCR
         if: github.event_name == 'push'
