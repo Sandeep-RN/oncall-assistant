@@ -52,3 +52,21 @@ def test_text_longer_than_the_model_reads_is_truncated_not_an_error(embedder):
 def test_missing_model_files_give_a_clear_message(tmp_path):
     with pytest.raises(FileNotFoundError, match="app.embed.download"):
         OnnxEmbedder(tmp_path)
+
+
+def test_telemetry_is_switched_off_before_the_session_is_created(monkeypatch):
+    """ONNX Runtime ships a telemetry provider (issue #15); the opt-out must run first."""
+    import onnxruntime as ort
+
+    if not all((DEFAULT_DIR / n).is_file() for n in FILES):
+        pytest.skip("model not downloaded (python -m app.embed.download)")
+    calls = []
+    real_session = ort.InferenceSession
+    monkeypatch.setattr(ort, "disable_telemetry_events", lambda: calls.append("disable"))
+    monkeypatch.setattr(
+        ort,
+        "InferenceSession",
+        lambda *a, **k: (calls.append("session"), real_session(*a, **k))[1],
+    )
+    OnnxEmbedder()
+    assert calls == ["disable", "session"]

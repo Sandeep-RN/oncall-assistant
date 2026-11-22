@@ -53,6 +53,14 @@ Checked on 2026-11-22:
   with, and a different model forces a full re-index.
 - Two passages (tables kept whole by the splitter) are embedded from their first 512 tokens only.
 - The measurement ran on x86; the node is arm64. Platform issue demo #196 measures the real pod.
+- The ONNX Runtime wheel contains a telemetry provider. It starts at `import onnxruntime` and, when
+  the home directory is not writable (as in the pod), prints "Failed to persist telemetry device
+  ID". Measured with `strace` on x86 (a control `connect()` was caught; none from the library):
+  loading the model and embedding a text open no network connection, with a writable or an
+  unwritable home. This was not measured on arm64, and a few seconds is not proof for all time.
+  So the code calls `disable_telemetry_events()` before the first session (it cannot silence the
+  import-time warning), CI embeds with `--network none`, and the M3 NetworkPolicy (egress to the
+  provider only) is what actually enforces "nothing else leaves the pod".
 - Loading the model alone takes about 200 MiB, so an index run where nothing changed still peaks
   near 225 MiB. The app pod (one question at a time) peaked at 207 MiB in the same setup.
 
