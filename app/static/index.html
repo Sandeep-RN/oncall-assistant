@@ -54,7 +54,12 @@
   .saved-item { background: var(--card); border: 1px solid var(--line); border-radius: .5rem; padding: .8rem 1.2rem; margin-bottom: 1rem; }
   .saved-item.match { border-left: 4px solid var(--accent); }
   .saved-item h3 { font-size: 1rem; margin: .3rem 0; }
-  .saved-text { white-space: pre-wrap; margin: .4rem 0 .6rem; }
+  .saved-text { margin: .4rem 0 .6rem; }
+  /* Answers keep their line breaks; code blocks keep their spacing and scroll sideways. */
+  .rich { white-space: pre-wrap; overflow-wrap: anywhere; }
+  .rich code { font: .9em ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--bg); border: 1px solid var(--line); border-radius: .25rem; padding: 0 .25em; }
+  .rich pre { white-space: pre; overflow-x: auto; margin: .6rem 0; padding: .6rem .8rem; background: var(--bg); border: 1px solid var(--line); border-radius: .4rem; }
+  .rich pre code { border: 0; padding: 0; background: none; }
   footer { margin-top: 2rem; }
 </style>
 </head>
@@ -87,7 +92,7 @@
 
   <section id="result" hidden aria-live="polite">
     <p id="kind"></p>
-    <p id="answer"></p>
+    <div id="answer" class="rich"></div>
     <h2 class="small">Sources</h2>
     <ol id="sources"></ol>
     <p id="meta" class="small"></p>
@@ -194,9 +199,52 @@
     return item;
   }
 
+  // A small, safe renderer for the three bits of markdown the model and the saved answers use:
+  // fenced code blocks, `inline code` and **bold**. Everything is built with createElement and
+  // textContent, so no HTML is ever parsed: a model that writes an HTML tag with an event handler
+  // gets it shown as text. Anything else (lists, links, headings) stays plain text with its line
+  // breaks.
+  const FENCE = /```[^\n`]*\n([\s\S]*?)```/g;
+  const INLINE = /(`[^`\n]+`|\*\*[^*\n]+\*\*)/;
+
+  function inline(parent, text) {
+    text.split(INLINE).forEach((piece) => {
+      if (!piece) return;
+      let node;
+      if (piece.length > 2 && piece.startsWith("`") && piece.endsWith("`")) {
+        node = document.createElement("code");
+        node.textContent = piece.slice(1, -1);
+      } else if (piece.length > 4 && piece.startsWith("**") && piece.endsWith("**")) {
+        node = document.createElement("strong");
+        node.textContent = piece.slice(2, -2);
+      } else {
+        node = document.createTextNode(piece);
+      }
+      parent.appendChild(node);
+    });
+  }
+
+  function rich(target, value) {
+    const text = String(value);
+    target.replaceChildren();
+    let last = 0;
+    for (const m of text.matchAll(FENCE)) {
+      // The blank lines around a fence are the fence's own; the block supplies the spacing.
+      const before = text.slice(last, m.index).replace(/\n+$/, "");
+      inline(target, last === 0 ? before : before.replace(/^\n+/, ""));
+      const pre = document.createElement("pre");
+      const code = document.createElement("code");
+      code.textContent = m[1].replace(/\n$/, "");
+      pre.appendChild(code);
+      target.appendChild(pre);
+      last = m.index + m[0].length;
+    }
+    inline(target, last === 0 ? text : text.slice(last).replace(/^\n+/, ""));
+  }
+
   function render(a) {
     kind.textContent = a.kind === "refusal" ? "Not in the documents" : "Answer";
-    answer.textContent = String(a.answer);
+    rich(answer, a.answer);
     sources.replaceChildren(...(a.citations || []).map(citation));
     const ms = Object.values(a.timings_ms || {}).reduce((sum, v) => sum + Number(v || 0), 0);
     // Only a live answer was written by the model for this question; a refusal may have been
@@ -219,9 +267,9 @@
       label.textContent = SAVED_LABEL + (item.id === matchId ? " (this is your question)" : "");
       const question = document.createElement("h3");
       question.textContent = String(item.question);
-      const text = document.createElement("p");
-      text.className = "saved-text";
-      text.textContent = String(item.answer);
+      const text = document.createElement("div");
+      text.className = "saved-text rich";
+      rich(text, item.answer);
       const list = document.createElement("ol");
       list.replaceChildren(...(item.citations || []).map(citation));
       block.append(label, question, text, list);
