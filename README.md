@@ -66,8 +66,11 @@ PGHOST=localhost PGPORT=5433 PGUSER=postgres PGDATABASE=postgres .venv/Scripts/p
 One run fetches each repo's current head (or `--lock corpus-lock.json` for the pinned commits),
 embeds only new or changed files with the local model and writes them to Postgres with pgvector,
 in one transaction under an advisory lock. Exit codes: 0 done, 1 a problem to look at, 2 another
-run is in progress. Full run on the current corpus: about 2 minutes, peak memory 247 MiB; a run
-with nothing changed: about 3 seconds ([ADR 0001](docs/adr/0001-local-onnx-embeddings-on-python-314.md)).
+run is in progress. Full run on the current corpus, in an x86 container test on a laptop: about
+2 minutes, peak memory 247 MiB; a run with nothing changed: about 3 seconds
+([ADR 0001](docs/adr/0001-local-onnx-embeddings-on-python-314.md)). On the arm64 node, held at its CPU
+limit, the first full run took 7 min 4 s with a working set of 271 MiB, measured once
+([demo #196](https://github.com/Sandeep-RN/oci-k8s-gitops-demo/issues/196)).
 
 ## Evals
 
