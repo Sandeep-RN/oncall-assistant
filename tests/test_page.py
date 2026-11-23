@@ -163,3 +163,70 @@ def test_the_page_is_not_part_of_the_api_schema(page):
     # GET / is a page, not an API call: it stays out of the API schema. The schema is built
     # in-process because /openapi.json is not served by default (issue #47).
     assert "/" not in app.openapi()["paths"]
+
+
+# --- Cross-links and the "Built with" row (issue #66) ---------------------------------------
+
+REPO = "https://github.com/Sandeep-RN/oncall-assistant"
+DEMO_REPO = "https://github.com/Sandeep-RN/oci-k8s-gitops-demo"
+ALLOWED_LINK_PREFIXES = (REPO, DEMO_REPO, "https://demo.sandeeprn.in")
+
+
+def markup_links(html: str) -> list[str]:
+    """Every href written in the static markup (the script builds its own, tested above)."""
+    without_script = re.sub(r"<script.*?</script>", "", html, flags=re.DOTALL)
+    return re.findall(r'<a\s[^>]*href="([^"]+)"', without_script)
+
+
+def test_the_header_links_to_the_platform_site_and_the_repo(page):
+    header = re.search(r"<header.*?</header>", page.text, re.DOTALL)
+    assert header, "a <header> with a nav is expected"
+    nav = header.group(0)
+    assert re.search(r'<nav [^>]*aria-label="', nav)
+    assert 'href="https://demo.sandeeprn.in"' in nav
+    assert f'href="{REPO}"' in nav
+
+
+def test_every_static_link_goes_to_a_known_place_and_is_safe(page):
+    links = markup_links(page.text)
+    assert links
+    for href in links:
+        assert href.startswith(ALLOWED_LINK_PREFIXES), href
+    # Links that open in a new tab must not hand it window.opener.
+    for tag in re.findall(
+        r"<a\s[^>]*>", re.sub(r"<script.*?</script>", "", page.text, flags=re.DOTALL)
+    ):
+        if 'target="_blank"' in tag:
+            assert "noopener" in tag, tag
+
+
+def test_no_inline_event_handlers_were_added(page):
+    # The policy has no 'unsafe-inline' for scripts: an on* attribute would be dead and a smell.
+    assert not re.search(
+        r"\son[a-z]+\s*=", re.sub(r"<script.*?</script>", "", page.text, flags=re.DOTALL)
+    )
+
+
+def test_the_built_with_row_lists_only_parts_the_repo_documents(page):
+    row = re.search(r'<ul class="stack".*?</ul>', page.text, re.DOTALL)
+    assert row, "a 'Built with' list is expected"
+    text = re.sub(r"<[^>]+>", " ", row.group(0))
+    for part in (
+        "FastAPI",
+        "ONNX Runtime",
+        "pgvector",
+        "Groq",
+        "k3s",
+        "Argo CD",
+        "Traefik",
+        "Sealed Secrets",
+    ):
+        assert part in text, part
+    # Every badge is a link to an ADR or a source file, never a bare logo.
+    assert row.group(0).count("<li>") == row.group(0).count("<a ")
+
+
+def test_the_resource_cap_line_matches_adr_0025(page):
+    # ADR 0025 (platform repo) and CLAUDE.md: 1 GiB of memory and 1 CPU for the whole namespace.
+    assert "1 GiB" in page.text and "1 CPU" in page.text
+    assert "0025-second-application-on-the-node-inside-a-hard-cap.md" in page.text
