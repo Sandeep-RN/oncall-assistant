@@ -4,6 +4,7 @@
 - GET  /saved    the saved answers (ADR 0003): from a file in the image, nothing else needed.
 - GET  /healthz  liveness only: never touches the database, the model files or the provider.
 - POST /ask      a cited answer or a refusal from the team's documents (ADR 0002).
+- /docs, /redoc, /openapi.json are not served unless ONCALL_ENABLE_API_DOCS=1 (issue #47).
 
 The real answerer (model, database pool, provider) is built at startup when it is configured.
 If something is missing, /ask says "not_configured" and /healthz still answers: a liveness probe
@@ -151,7 +152,23 @@ async def lifespan(app: FastAPI):
         http.close()
 
 
-app = FastAPI(title="oncall-assistant", lifespan=lifespan)
+API_DOCS_FLAG = "ONCALL_ENABLE_API_DOCS"
+
+
+def api_docs_settings() -> dict[str, str | None]:
+    """FastAPI's docs and schema routes: off unless ONCALL_ENABLE_API_DOCS=1 (issue #47).
+
+    FastAPI serves /docs, /redoc and /openapi.json by default. /docs loads Swagger UI from a
+    third-party CDN, outside the page's CSP, and a public demo needs no API console. Off is the
+    default so production needs no setting and a missing variable fails safe; only the exact value
+    "1" turns them on, so a typo or "false" cannot open them by accident.
+    """
+    if os.environ.get(API_DOCS_FLAG) == "1":
+        return {}  # FastAPI's defaults: /docs, /redoc, /openapi.json
+    return {"docs_url": None, "redoc_url": None, "openapi_url": None}
+
+
+app = FastAPI(title="oncall-assistant", lifespan=lifespan, **api_docs_settings())
 app.state.answerer = None
 
 

@@ -160,5 +160,6 @@ def test_the_page_can_send_a_demo_token_and_explains_a_rejected_one(page):
 
 
 def test_the_page_is_not_part_of_the_api_schema(page):
-    # GET / is a page, not an API call: it stays out of /openapi.json.
-    assert "/" not in TestClient(app).get("/openapi.json").json()["paths"]
+    # GET / is a page, not an API call: it stays out of the API schema. The schema is built
+    # in-process because /openapi.json is not served by default (issue #47).
+    assert "/" not in app.openapi()["paths"]

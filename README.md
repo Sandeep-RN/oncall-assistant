@@ -10,7 +10,8 @@ role-played by the author; its documents and its single-node k3s platform are
 real and public. The assistant is deployed onto that platform through its
 GitOps repository, inside a hard resource cap, at no infrastructure cost.
 
-**Status (2026-11-22):** milestone M1 (target 2026-12-09) is in progress. The assistant is
+**Status (2026-11-23):** milestone M1 MVP is done (2026-11-23, target was 2026-12-09); next is M2,
+evals and SLOs. The assistant is
 deployed at https://ask.sandeeprn.in through the platform's GitOps repository. Done: the corpus,
 local embeddings and the pgvector index ([ADR 0001](docs/adr/0001-local-onnx-embeddings-on-python-314.md)),
 `POST /ask` with cited answers or a refusal ([ADR 0002](docs/adr/0002-cite-or-refuse-one-openai-compatible-call.md)),
@@ -105,7 +106,9 @@ citing them as `[n]`, or says "I don't know" ([ADR 0002](docs/adr/0002-cite-or-r
 
 Every live answer carries `timings_ms` and `tokens`. Logs keep a hash and the length of the question,
 never its text. `GET /saved` lists the saved answers (no database or key needed) and `GET /` is the
-question page.
+question page. FastAPI's `/docs`, `/redoc` and `/openapi.json` are not served; set
+`ONCALL_ENABLE_API_DOCS=1` to turn them on locally (issue #47: `/docs` loads script from a CDN,
+outside the page's CSP).
 
 ## Daily budget and demo tokens
 

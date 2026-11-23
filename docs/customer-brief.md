@@ -76,7 +76,7 @@ public; high availability (the platform has one node).
 
 | Milestone | Delivers | Target date |
 |---|---|---|
-| M1 MVP | Cited answers on a live URL | 2026-12-09 |
+| M1 MVP | Cited answers on a live URL | 2026-12-09 (done 2026-11-23) |
 | M2 Evals and SLOs | Scores in the README, retrieval gate in CI, dashboard and alerts | 2026-12-23 |
 | M3 Agent | Read-only live-state tools behind the token | 2027-01-06 |
 | M4 Reliability and handover | Logs, handover runbook, demo video, write-up | about 2027-01-20 |
