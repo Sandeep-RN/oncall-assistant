@@ -21,6 +21,7 @@ answers when the free model tier is at its limit, and a daily token budget with 
 the public share ([ADR 0003](docs/adr/0003-saved-answers-on-capacity-limits-and-a-daily-budget.md)).
 
 - [Customer brief](docs/customer-brief.md): problem, users, constraints, success criteria, delivery
+- [Project brief](PROJECT_BRIEF.md): the facts and numbers, with sources, for anything written about this project
 - [Glossary](GLOSSARY.md): the terms used in this repo and its issues
 - [Issues and milestones](https://github.com/Sandeep-RN/oncall-assistant/milestones): app work
 - [Platform side](https://github.com/Sandeep-RN/oci-k8s-gitops-demo/milestone/6): ADR 0025 and the gitops manifests
