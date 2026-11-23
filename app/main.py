@@ -77,7 +77,8 @@ def _load_saved() -> SavedAnswers | None:
 SAVED = _load_saved()
 
 # Demo tokens (ADR 0003): a mounted directory of token hashes, read on every lookup so a token added
-# or revoked works within about a minute with no restart. Unset or empty means no tokens exist,
+# or revoked works with no restart: 1 to 5 minutes after the merge (ArgoCD sync), then 3 to 16 s for
+# the kubelet's mount refresh (measured live, demo #218). Unset or empty means no tokens exist,
 # and a request that presents one is refused (401), never treated as the public.
 TOKENS = DemoTokens(os.environ.get("DEMO_TOKEN_DIR"))
 

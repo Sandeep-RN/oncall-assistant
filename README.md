@@ -123,7 +123,8 @@ limit or the edge's per-client limit. The day is a UTC day (Groq documents no da
 The app role is read-only; it writes only that table, and only inside an explicit
 `SET TRANSACTION READ WRITE` (the platform repo grants it, and runs the same rules on a real Postgres
 in CI). The cluster holds only the SHA-256 of each token, one file per token in `DEMO_TOKEN_DIR`;
-a token added or revoked works within about a minute, with no restart. A broken ledger never stops
+a token added or revoked works with no restart, 1 to 5 minutes after the merge (ArgoCD syncs, then
+the kubelet refreshes the mount within 3 to 16 s; measured in demo #218). A broken ledger never stops
 an answer (it is logged as `budget_error`); a database that is down fails at once with a 503.
 
 ## Saved answers

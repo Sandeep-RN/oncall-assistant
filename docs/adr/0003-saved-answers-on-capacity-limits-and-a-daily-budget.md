@@ -62,8 +62,10 @@ token mount) is gitops PR #85.
 7. **Demo token (PR C).** A request header `X-Demo-Token`. The cluster holds only the SHA-256 of
    each token, with a name: one file per token in a mounted Secret directory (`DEMO_TOKEN_DIR`),
    the file name being the name and its content the lowercase hex hash. The directory is read on
-   every lookup, so a token added or revoked works within about a minute with no restart (the
-   kubelet refreshes the mount). The server hashes the presented token and compares it with every
+   every lookup, so a token added or revoked works with no restart (the kubelet refreshes the
+   mount). Measured live on 2026-11-23 (demo #218, four merges): ArgoCD synced 1 to 5 minutes
+   after the merge, and the mount changed 3 to 16 s after the sync; a revoked token then got a
+   401. The server hashes the presented token and compares it with every
    stored hash in constant time; plain SHA-256 is enough for 32 random bytes. A wrong token is a
    401, never a silent downgrade, and a 401 is the client's mistake, outside the availability
    target like a 422. A token lifts only the public share: not the provider's per-minute limit and
