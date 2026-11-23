@@ -22,6 +22,8 @@ Checked on 2026-11-22:
 - **Python 3.14** for this repository (CI, `pyproject.toml`, the image in issue #7). Move to 3.15
   when ONNX Runtime publishes cp315 Linux arm64 wheels; Dependabot or a periodic check of PyPI
   shows when.
+  Since #59, Dependabot (`.github/dependabot.yml`) proposes the `python:3.15-slim` base; that
+  PR's image build fails at `pip install` until onnxruntime ships a cp315 wheel.
 - **`BAAI/bge-small-en-v1.5`** (MIT licence), fp32 ONNX, 384 dimensions, pinned to a Hugging Face
   revision and checked by sha256. Questions get the model's retrieval prefix; passages are embedded
   as their heading path followed by their text, truncated at 512 tokens.

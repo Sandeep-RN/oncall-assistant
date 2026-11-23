@@ -1,0 +1,83 @@
+# Dependabot version updates (#59), modelled on the link shortener's config in
+# Sandeep-RN/oci-k8s-gitops-demo-app. Reference:
+# https://docs.github.com/en/code-security/dependabot/working-with-dependabot/dependabot-options-reference
+#
+# Every ecosystem: weekly, Monday morning IST, at most a few open PRs. Minor and
+# patch updates are batched into one PR per ecosystem where it has more than
+# one dependency; major updates come as their own PRs. Dependabot's default
+# 3-day cooldown for new releases applies.
+#
+# MERGING CAN BE A DEPLOY. ci.yml builds, scans and pushes the image, and opens
+# an auto-merging tag-bump PR in the gitops repo, on a push to main that touches
+# app/, requirements.txt, Dockerfile, .dockerignore or ci.yml. So merging a pip
+# PR that changes requirements.txt, a docker PR, or an actions PR that edits
+# ci.yml rolls ask.sandeeprn.in. A PR that changes only requirements-dev.txt or
+# gitleaks.yml does not. Review these like any other release, inside the
+# memory budget of platform ADR 0025.
+#
+# Dependabot-triggered runs get a read-only GITHUB_TOKEN and no regular Actions
+# secrets. The pull-request checks (tests, image build, Trivy, smoke test,
+# gitleaks) need none: the GHCR login and the tag bump (GITOPS_TOKEN) run on
+# pushes to main only.
+#
+# "Dependabot security updates" is a separate repo setting, not enabled here.
+version: 2
+updates:
+  # Actions are pinned by commit SHA with a version comment on the same line
+  # (`uses: owner/repo@<sha> # v1.2.3`); Dependabot updates both.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Asia/Kolkata"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "CI"
+    groups:
+      actions-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  # requirements.txt (runtime, exact pins, baked into the image) and
+  # requirements-dev.txt (test and lint tools; includes requirements.txt with
+  # -r). pyproject.toml declares no dependencies. A new onnxruntime release
+  # arrives here; whether it has a cp315 wheel is what the docker PR below
+  # shows (docs/adr/0001).
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Asia/Kolkata"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "Deps"
+    groups:
+      python-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  # The base image in Dockerfile, pinned as python:3.14-slim@sha256:... .
+  # Dependabot refreshes the digest and proposes newer tags with the same
+  # suffix. No group: there is one dependency, so each update is its own PR,
+  # and a Python minor move is never hidden inside a digest refresh.
+  #
+  # The Python 3.15 signal (docs/adr/0001): a PR moving the base to
+  # python:3.15-slim fails the image build at `pip install` while onnxruntime
+  # ships no cp315 wheel (it publishes wheels only, no sdist). When that PR's
+  # image build passes, the wheels exist. Taking it also means moving
+  # python-version in ci.yml and target-version in pyproject.toml, so the
+  # tests run on the Python the image ships.
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Asia/Kolkata"
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: "Image"
