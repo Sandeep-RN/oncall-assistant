@@ -1,7 +1,7 @@
 {
   "generated": "2026-11-22",
   "model": "gpt-oss-120b",
-  "note": "Drafted by `python -m app.saved.build` over the pinned corpus (2026-11-22), then edited by hand twice. 2026-11-22: two drafts were trimmed because they claimed more than their cited passage says. 2026-11-23: each answer was read beside its full passages by a second model and the owner; changes: roll-back-a-deploy (adds the first step, scopes it to the link shortener, drops 'immediately'), revoke-a-token (says the runbook has not been run on k3s, keeps the ${#TOKEN} check and that links the token already made keep working), no-point-in-time-restore (scoped to the link shortener's Postgres), biggest-availability-limit (says the roadmap does not rank its limits), assistant-memory-cap (limits and LimitRange stated precisely). Rebuilding overwrites this file: re-review the diff.",
+  "note": "Drafted by `python -m app.saved.build` over the pinned corpus (2026-11-22), then edited by hand twice. 2026-11-22: two drafts were trimmed because they claimed more than their cited passage says. 2026-11-23: each answer was read beside its full passages by a second model and the owner; changes: roll-back-a-deploy (adds the first step, scopes it to the link shortener, drops 'immediately'), revoke-a-token (says the runbook has not been run on k3s, keeps the ${#TOKEN} check and that links the token already made keep working), no-point-in-time-restore (scoped to the link shortener's Postgres), biggest-availability-limit (says the roadmap does not rank its limits), assistant-memory-cap (limits and LimitRange stated precisely). Rebuilding overwrites this file: re-review the diff. 2026-11-23, pin moved (issue #50): the five answers keep their reviewed text and only the commit in each link changed. Three answers cite passages that are word for word identical at the new pin. Two cite a section that gained text (gitops README 'Secrets': a paragraph on the assistant's secrets and demo tokens; ADR 0025 'Decision': the sizing table now shows the measured numbers). The sentences each of those two answers relies on are unchanged, checked by a diff of the passages; the owner re-reads both in the pull request. A full rebuild with `python -m app.saved.build` was tried first and discarded, because it overwrote the reviewed wording.",
   "answers": [
     {
       "id": "roll-back-a-deploy",
@@ -10,7 +10,7 @@
       "citations": [
         {
           "n": 1,
-          "url": "https://github.com/Sandeep-RN/oci-k8s-gitops-demo/blob/2d701252136707eb17d36f9a7535cd2ec5c43206/docs/runbooks/slo-redirect-availability.md#recent-deploy-500",
+          "url": "https://github.com/Sandeep-RN/oci-k8s-gitops-demo/blob/5ff5840e11cc517cc8d33c20b6e2f2b79d0d0c1a/docs/runbooks/slo-redirect-availability.md#recent-deploy-500",
           "repo": "Sandeep-RN/oci-k8s-gitops-demo",
           "path": "docs/runbooks/slo-redirect-availability.md",
           "title": "Runbook: redirect SLO burn-rate alerts > Recent deploy (500)"
@@ -24,14 +24,14 @@
       "citations": [
         {
           "n": 1,
-          "url": "https://github.com/Sandeep-RN/oci-k8s-gitops-demo/blob/2d701252136707eb17d36f9a7535cd2ec5c43206/docs/runbooks/edge.md#revoke-a-link-creation-token",
+          "url": "https://github.com/Sandeep-RN/oci-k8s-gitops-demo/blob/5ff5840e11cc517cc8d33c20b6e2f2b79d0d0c1a/docs/runbooks/edge.md#revoke-a-link-creation-token",
           "repo": "Sandeep-RN/oci-k8s-gitops-demo",
           "path": "docs/runbooks/edge.md",
           "title": "Runbook: the edge (certificate, Cloudflare tokens, link-creation tokens) > Revoke a link-creation token"
         },
         {
           "n": 4,
-          "url": "https://github.com/Sandeep-RN/oci-k8s-gitops-demo-gitops/blob/6947c6d160da26ec2be75b4f86b7d7f868196395/README.md#secrets",
+          "url": "https://github.com/Sandeep-RN/oci-k8s-gitops-demo-gitops/blob/4786429977eddccd19d3518bb1a9e52395b8c3df/README.md#secrets",
           "repo": "Sandeep-RN/oci-k8s-gitops-demo-gitops",
           "path": "README.md",
           "title": "oci-k8s-gitops-demo-gitops > Secrets"
@@ -45,7 +45,7 @@
       "citations": [
         {
           "n": 2,
-          "url": "https://github.com/Sandeep-RN/oci-k8s-gitops-demo/blob/2d701252136707eb17d36f9a7535cd2ec5c43206/docs/runbooks/postgres-backup-restore.md#notes",
+          "url": "https://github.com/Sandeep-RN/oci-k8s-gitops-demo/blob/5ff5840e11cc517cc8d33c20b6e2f2b79d0d0c1a/docs/runbooks/postgres-backup-restore.md#notes",
           "repo": "Sandeep-RN/oci-k8s-gitops-demo",
           "path": "docs/runbooks/postgres-backup-restore.md",
           "title": "Runbook: Postgres backups and restore > Notes"
@@ -59,14 +59,14 @@
       "citations": [
         {
           "n": 2,
-          "url": "https://github.com/Sandeep-RN/oci-k8s-gitops-demo/blob/2d701252136707eb17d36f9a7535cd2ec5c43206/docs/roadmap.md#known-limits",
+          "url": "https://github.com/Sandeep-RN/oci-k8s-gitops-demo/blob/5ff5840e11cc517cc8d33c20b6e2f2b79d0d0c1a/docs/roadmap.md#known-limits",
           "repo": "Sandeep-RN/oci-k8s-gitops-demo",
           "path": "docs/roadmap.md",
           "title": "Known limits and what comes next > Known limits"
         },
         {
           "n": 1,
-          "url": "https://github.com/Sandeep-RN/oci-k8s-gitops-demo/blob/2d701252136707eb17d36f9a7535cd2ec5c43206/docs/architecture.md#5-the-cluster-k3s-on-one-always-free-node",
+          "url": "https://github.com/Sandeep-RN/oci-k8s-gitops-demo/blob/5ff5840e11cc517cc8d33c20b6e2f2b79d0d0c1a/docs/architecture.md#5-the-cluster-k3s-on-one-always-free-node",
           "repo": "Sandeep-RN/oci-k8s-gitops-demo",
           "path": "docs/architecture.md",
           "title": "Architecture > 5. The cluster: k3s on one Always Free node"
@@ -80,7 +80,7 @@
       "citations": [
         {
           "n": 1,
-          "url": "https://github.com/Sandeep-RN/oci-k8s-gitops-demo/blob/2d701252136707eb17d36f9a7535cd2ec5c43206/docs/adr/0025-second-application-on-the-node-inside-a-hard-cap.md#decision",
+          "url": "https://github.com/Sandeep-RN/oci-k8s-gitops-demo/blob/5ff5840e11cc517cc8d33c20b6e2f2b79d0d0c1a/docs/adr/0025-second-application-on-the-node-inside-a-hard-cap.md#decision",
           "repo": "Sandeep-RN/oci-k8s-gitops-demo",
           "path": "docs/adr/0025-second-application-on-the-node-inside-a-hard-cap.md",
           "title": "0025. A second application on the node, inside a hard resource cap > Decision"
