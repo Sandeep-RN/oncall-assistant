@@ -4,8 +4,9 @@ The cluster never holds a token, only its SHA-256. They arrive as a mounted Secr
 with one file per token. The file name is the token's name (logged with each question), the content
 the lowercase hex SHA-256 of the token (scripts/seal-demo-tokens.sh in the gitops repo makes it).
 The kubelet refreshes a mounted Secret in place, so a token added, rotated or revoked takes effect
-within about a minute with no restart: the directory is read on every lookup, never cached. It
-holds a few small files, and it is read only when a request carries a token.
+with no restart: the directory is read on every lookup, never cached. Measured live (demo #218,
+four merges): ArgoCD synced 1 to 5 minutes after the merge, then the mount changed 3 to 16 s later.
+It holds a few small files, and it is read only when a request carries a token.
 
 Plain SHA-256 is enough because a token is 32 random bytes: it cannot be guessed from its hash. The
 comparison visits every stored hash with a constant-time compare, so the time taken does not say
