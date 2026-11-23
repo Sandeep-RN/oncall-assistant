@@ -57,8 +57,9 @@ Live at <https://ask.sandeeprn.in> since 2026-11-22
 Milestone **M1 MVP closed on 2026-11-23** (12 issues closed, 0 open; its
 target date was 2026-12-09). M2 "Evals and SLOs" is open (due 2026-12-23),
 with [#14](https://github.com/Sandeep-RN/oncall-assistant/issues/14) (grow the
-eval set) still open. M3 and M4 are planned in the
-[customer brief](docs/customer-brief.md) but not started.
+eval set) still open. [M3 Agent](https://github.com/Sandeep-RN/oncall-assistant/milestone/3) (target 2027-01-06) and
+[M4 Reliability and handover](https://github.com/Sandeep-RN/oncall-assistant/milestone/4) (about 2027-01-20) are milestones from the
+[customer brief](docs/customer-brief.md), with no issues yet and not started.
 
 ## Facts
 
@@ -99,7 +100,8 @@ Every row has a source.
 | Live smoke check of cited answers | Both providers, 5 eval questions: 3 answered with the expected document cited, 2 refused (10 of 10). Five questions are a smoke check, not a result | [PR #16](https://github.com/Sandeep-RN/oncall-assistant/pull/16) |
 | Cost of one answer | 2.0 to 2.5K prompt tokens and 25 to 240 completion tokens, so about 3 live answers a minute on Groq's 8K-tokens-a-minute free tier; generation 0.5 to 1.3 s, retrieval 0.1 to 0.2 s (5 questions) | [ADR 0002](docs/adr/0002-cite-or-refuse-one-openai-compatible-call.md) |
 | Indexing memory, container test on x86 | Before the batching fix: OOM-killed at a 384Mi limit, 435 MiB peak without a limit. After (fixed lengths plus a token budget): 247 MiB. Full index of 285 passages, laptop Docker | [ADR 0001](docs/adr/0001-local-onnx-embeddings-on-python-314.md), [#19](https://github.com/Sandeep-RN/oncall-assistant/issues/19) |
-| Memory on the arm64 node, one run | First index run on the node (286 passages, 7 min 4 s): index Job working set 271 MiB of 384 MiB, app 247 MiB of 320 MiB, Postgres 34 MiB of 256 MiB; no restarts, no OOM kills | [demo #196](https://github.com/Sandeep-RN/oci-k8s-gitops-demo/issues/196) (comment of 2026-11-22) |
+| Memory on the arm64 node, one run | First index run on the node (286 passages, 7 min 4 s): index Job working set 271 MiB of 384 MiB, app pod 247 MiB of 320 MiB (not the x86 test's 247 MiB, which is the index Job), Postgres 34 MiB of 256 MiB; no restarts, no OOM kills | [demo #196](https://github.com/Sandeep-RN/oci-k8s-gitops-demo/issues/196#issuecomment-7076495326) (comment of 2026-11-22) |
+| Hard cap on the live node, single checks | A pod that would take memory limits over the 1 GiB quota was refused on a server-side dry run (128Mi refused with 960Mi in use; 64Mi passed). All four pods run at priority -100 and QoS Burstable | [demo #196](https://github.com/Sandeep-RN/oci-k8s-gitops-demo/issues/196#issuecomment-7076495326) (comment of 2026-11-22, items 1 to 3) |
 | Delivery path | The first real CI run pushed a tag-bump pull request into the gitops repo, which auto-merged (gitops #79); ArgoCD rolls each bump | [#7](https://github.com/Sandeep-RN/oncall-assistant/issues/7), [#32](https://github.com/Sandeep-RN/oncall-assistant/issues/32) |
 | Demo token revoke | A token added or revoked by a merge works with no restart, 1 to 5 minutes after the merge (ArgoCD sync, then the mount refresh in 3 to 16 s); a revoked token then got a 401. Four merges | [ADR 0003](docs/adr/0003-saved-answers-on-capacity-limits-and-a-daily-budget.md), [demo #218](https://github.com/Sandeep-RN/oci-k8s-gitops-demo/issues/218) |
 | Least-privilege database role | The app role can write one table only, and only inside an explicit read-write transaction; a CI step tries the permissions on a real Postgres (26 checks) | [demo #207](https://github.com/Sandeep-RN/oci-k8s-gitops-demo/issues/207), [#33](https://github.com/Sandeep-RN/oncall-assistant/issues/33) |
@@ -118,14 +120,22 @@ How to quote these honestly:
   correct", and never drop "below its 90% target".
 - **Answer quality is not measured.** Whether each claim is supported by its
   citation is the M2 answer eval. The 10 of 10 is a five-question smoke check.
-- **Keep the memory numbers apart.** 435 MiB and 247 MiB are a container test
-  on x86 on a laptop. 271 MiB is the index Job's working set on the arm64
-  node, from one run. 247 MiB is also the app pod's peak on the node: a
-  different pod and a different measurement. The node figures belong to demo
-  #196, which is still open; say "measured once on the node", not "verified".
-  Do not write "cut memory from 435 to 271 MiB".
+- **Keep the memory numbers apart.** There are two different "247 MiB"
+  figures. (1) Index Job, x86 container test on a laptop (ADR 0001, #19):
+  435 MiB before the batching fix (OOM-killed at 384Mi), 247 MiB after.
+  (2) App pod, arm64 node, one run (demo #196): 247 MiB working set. On the
+  node the index Job's working set was 271 MiB. Always name the pod and the
+  setup next to the number. The node figures belong to demo #196, which is
+  still open; say "measured once on the node", not "verified". Do not write
+  "cut memory from 435 to 271 MiB".
 - **ADR 0025 hosting is designed, not verified.** Say "designed to run inside
-  a hard 1 GiB cap"; do not claim it is proven until demo #196 closes.
+  a hard 1 GiB cap"; do not claim it is proven until demo #196 closes. The
+  single checks posted on demo #196 on 2026-11-22 may be quoted one at a
+  time, each as what it is, for example "the quota refused an over-cap pod on
+  a server-side dry run" or "all four pods run at a negative priority". Never
+  add them up into "ADR 0025 verified" or "the cap is proven".
+- **Image size is not quoted.** Leave it out of the brief and everything
+  written from it.
 - **The model is gpt-oss-120b on Groq's free tier** in the cluster. Do not
   name any other provider or model for the live site.
 - **There is no SLO, dashboard or alert yet.** The 99% availability and 8 s
@@ -221,8 +231,8 @@ Pick three to five. Do not merge two bullets into one bigger claim.
   multi-arch (arm64) image scanned by Trivy before push, published to GHCR,
   and a tag-bump pull request that ArgoCD deploys.
 - Fixed an out-of-memory kill in the embedding job by changing the batching to
-  a few fixed input shapes with a token budget: in a container test, peak
-  memory fell from 435 MiB (OOM-killed at a 384Mi limit) to 247 MiB.
+  a few fixed input shapes with a token budget: in an x86 container test,
+  peak memory fell from 435 MiB (OOM-killed at a 384Mi limit) to 247 MiB.
 - Kept a free-tier LLM demo honest under load: a daily token budget in
   Postgres, labelled saved answers when capacity runs out, and real faults
   still returned as errors, kept apart from capacity limits.
@@ -298,5 +308,5 @@ Update this file, then everything written from it, when these close:
 |---|---|
 | Demo #196 closes (7-day item, about 2026-11-29) | "Facts" Hosting and "Decisions": ADR 0025 may be called verified, with the results posted there. Remove its line from "Not done" and the "designed, not verified" quoting rule |
 | M2 Evals and SLOs closes (due 2026-12-23) | "Results": the grown eval set's retrieval score and the answer eval; the 7-day availability and latency figures as measured. Rewrite the 89% quoting rule for the new set. A bullet for the CI eval gate, SLOs and alerts may be added. Remove M2 from "Not done" |
-| M3 Agent closes (target 2027-01-06) | "Facts" and a bullet for the read-only live-state tools and the egress NetworkPolicy. Remove M3 from "Not done" |
-| M4 closes (about 2027-01-20) | Links to the demo video and the write-up; the portfolio card's `status` becomes `"done"` |
+| [M3 Agent](https://github.com/Sandeep-RN/oncall-assistant/milestone/3) closes (target 2027-01-06) | "Facts" and a bullet for the read-only live-state tools and the egress NetworkPolicy. Remove M3 from "Not done" |
+| [M4 Reliability and handover](https://github.com/Sandeep-RN/oncall-assistant/milestone/4) closes (about 2027-01-20) | Links to the demo video and the write-up; the portfolio card's `status` becomes `"done"` |

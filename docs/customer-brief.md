@@ -9,8 +9,8 @@ and its two sibling repos.
 
 The platform team runs a small Kubernetes platform (single-node k3s on Oracle
 Cloud's free tier) with GitOps delivery, an SLO with burn-rate alerts and
-tested backups. What the team knows is written down: two dozen architecture
-decision records, eight runbooks and several evidence write-ups. When an alert fires, the
+tested backups. What the team knows is written down: 25 architecture
+decision records, nine runbooks and several evidence write-ups. When an alert fires, the
 on-call engineer has to find the right runbook and the decision behind it,
 across three repositories, under time pressure.
 
