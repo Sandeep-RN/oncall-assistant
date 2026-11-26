@@ -2,7 +2,19 @@
 
 The single source of facts about this project for anything written about it
 somewhere else: a resume, a portfolio page, a profile, a post, an interview
-answer. **Last verified: 2026-11-23** (milestone M1 closed that day).
+answer. **Last verified: 2026-11-26** (milestone M1 closed on 2026-11-23).
+
+On 2026-11-26 these were re-checked: merged pull requests, issues and
+milestones (`gh`), the latest CI run on `main`, the code and the manifests in
+the gitops repo, the corpus counts and the retrieval eval (re-run, see
+"Results"), the comments on demo #196, and the public site (GET only).
+**Not re-checked**, so they keep their original date: the live smoke check, the
+per-answer tokens and times, the x86 and node memory measurements, the quota,
+priority and QoS checks, the token revoke drill, the database permission checks,
+the cost, Groq's limits and data terms, anything inside the cluster (including
+the live index and its nightly runs), and `POST /ask` (not called: it spends the
+provider's budget). The "Problems found and fixed" rows were not re-read issue
+by issue.
 
 ## How to use this file
 
@@ -35,7 +47,7 @@ know", running for free on that platform's own Kubernetes node.
 pgvector, a local ONNX embedding model) that answers on-call questions from
 the docs of a Kubernetes platform. Every answer cites its source
 passage, or the assistant says "I don't know". It is delivered through the
-platform's GitOps repo and runs inside a hard 1 GiB memory cap.
+platform's GitOps repo and designed to run inside a hard 1 GiB memory cap.
 
 **150 words.** A personal project, set up as a mock customer engagement: the
 "customer" is the platform team of my own Kubernetes project, and its
@@ -44,22 +56,38 @@ gets a short answer that cites the exact runbook or decision record, or "I
 don't know". Retrieval uses a local embedding model on ONNX Runtime and
 pgvector; one OpenAI-compatible call to gpt-oss-120b on Groq's free tier
 writes the answer, and the app turns any answer without a valid citation into
-a refusal. The assistant ships the way the platform's own service does: an arm64 image
-scanned by Trivy, pushed to GHCR, and a tag-bump pull request that ArgoCD
-deploys. It shares one free node with a live site, inside a 1 GiB cap, with a
-daily token budget, saved answers for when the free tier runs out, and a
-read-only database role.
+a refusal. The assistant ships the way the platform's own service does: a
+Trivy-gated multi-arch image (the node is arm64) pushed to GHCR, and a tag-bump
+pull request that ArgoCD deploys. It shares one free node with a live site,
+designed to stay inside a 1 GiB cap, and has a daily token budget, saved answers
+for when the free tier runs out, and a read-only database role.
 
 ## Status
 
 Live at <https://ask.sandeeprn.in> since 2026-11-22
 ([demo #195](https://github.com/Sandeep-RN/oci-k8s-gitops-demo/issues/195)).
 Milestone **M1 MVP closed on 2026-11-23** (12 issues closed, 0 open; its
-target date was 2026-12-09). M2 "Evals and SLOs" is open (due 2026-12-23),
-with [#14](https://github.com/Sandeep-RN/oncall-assistant/issues/14) (grow the
-eval set) still open. [M3 Agent](https://github.com/Sandeep-RN/oncall-assistant/milestone/3) (target 2027-01-06) and
-[M4 Reliability and handover](https://github.com/Sandeep-RN/oncall-assistant/milestone/4) (about 2027-01-20) are milestones from the
-[customer brief](docs/customer-brief.md), with no issues yet and not started.
+target date was 2026-12-09). M2 "Evals and SLOs" is open (target 2026-12-23):
+on 2026-11-26 it had 4 closed issues (the corpus pin and docs work:
+[#50](https://github.com/Sandeep-RN/oncall-assistant/issues/50), #55, #57, #62)
+and, of M2's own work, 1 open:
+[#14](https://github.com/Sandeep-RN/oncall-assistant/issues/14) (grow the eval
+set). A base-image security fix,
+[#71](https://github.com/Sandeep-RN/oncall-assistant/issues/71), was also filed
+there later that day and is not M2 work. Closed issues there do not mean an M2
+result exists.
+[M3 Agent](https://github.com/Sandeep-RN/oncall-assistant/milestone/3) (target
+2027-01-06, no issues yet) and
+[M4 Reliability and handover](https://github.com/Sandeep-RN/oncall-assistant/milestone/4)
+(about 2027-01-20; its one issue so far,
+[#59](https://github.com/Sandeep-RN/oncall-assistant/issues/59) Dependabot, is
+closed and delivers none of the milestone's four items) are open milestones from
+the [customer brief](docs/customer-brief.md).
+
+The target dates here are the customer brief's. The due date that GitHub shows on
+each [milestone](https://github.com/Sandeep-RN/oncall-assistant/milestones) is
+one day earlier (12-08, 12-22, 01-05, 01-19; read 2026-11-26), probably a time
+zone effect of how it was set. Quote the target date and say "target".
 
 ## Facts
 
@@ -69,13 +97,14 @@ eval set) still open. [M3 Agent](https://github.com/Sandeep-RN/oncall-assistant/
 | Kind | Personal project, set up as a mock customer engagement (the author role-plays the customer). One person: design, decisions, build, operation |
 | Period | From 2026-11-21 (first commit); M1 done 2026-11-23 |
 | Repo (public) | <https://github.com/Sandeep-RN/oncall-assistant>; its manifests are in the platform's [gitops repo](https://github.com/Sandeep-RN/oci-k8s-gitops-demo-gitops) (`apps/oncall-assistant`) |
-| Live URL | <https://ask.sandeeprn.in> (a one-file question page at `/`, `POST /ask`, `GET /saved`, `/healthz`; the framework's `/docs` is off, [#47](https://github.com/Sandeep-RN/oncall-assistant/issues/47)) |
-| What it answers from | The Markdown docs of the three platform repos: 50 documents, 297 passages at the current pin ([PR #51](https://github.com/Sandeep-RN/oncall-assistant/pull/51), `corpus-lock.json`) |
-| Model | gpt-oss-120b. In the cluster through **Groq's free tier**; development and evals use a separate key (KodeKey) that stays on the laptop and in CI ([ADR 0002](docs/adr/0002-cite-or-refuse-one-openai-compatible-call.md), [CLAUDE.md](CLAUDE.md)) |
+| Live URL | <https://ask.sandeeprn.in> (a one-file question page at `/`, `POST /ask`, `GET /saved`, `/healthz`; the framework's `/docs` is off, [#47](https://github.com/Sandeep-RN/oncall-assistant/issues/47)). Checked 2026-11-26: `/`, `/saved` and `/healthz` answered 200; `/docs`, `/redoc` and `/openapi.json` 404; the served page was identical to `app/static/index.html` on `main`, and `/saved` returned the repo's five answers |
+| On the page (since 2026-11-23) | Header links to the platform site <https://demo.sandeeprn.in> and to this repo; a "Built with" row of 8 text badges (FastAPI + Python, ONNX Runtime embeddings, Postgres + pgvector, Groq, k3s on OCI, Argo CD, Traefik, Sealed Secrets), each a link to an ADR, a source file or this brief; and a line naming the 1 GiB / 1 CPU cap with a link to ADR 0025 ([PR #67](https://github.com/Sandeep-RN/oncall-assistant/pull/67), [PR #69](https://github.com/Sandeep-RN/oncall-assistant/pull/69)). The platform's home page links back to the assistant (checked 2026-11-26) |
+| What it answers from | The Markdown docs of the three platform repos. **Pinned corpus** (the eval and the saved answers, `corpus-lock.json`): 50 documents, 297 passages ([PR #51](https://github.com/Sandeep-RN/oncall-assistant/pull/51); rebuilt 2026-11-26, same counts). **The live index is not pinned:** a nightly run follows each repo's head ([ADR 0003](docs/adr/0003-saved-answers-on-capacity-limits-and-a-daily-budget.md), point 2). Built from the heads on 2026-11-26 (demo 3bafb88, app cdb2cba, gitops 7a6a99d) the corpus had 53 documents and 316 passages; this was computed off the cluster with the repo's corpus code, not read from the live index |
+| Model | gpt-oss-120b. In the cluster through **Groq's free tier**; development and evals use a separate key (KodeKey) that never reaches the cluster ([ADR 0002](docs/adr/0002-cite-or-refuse-one-openai-compatible-call.md), [CLAUDE.md](CLAUDE.md)). CI calls no model today: the workflows use no provider key (checked 2026-11-26) |
 | Embeddings | `BAAI/bge-small-en-v1.5`, fp32 ONNX, 384 dimensions, run locally; no embedding API ([ADR 0001](docs/adr/0001-local-onnx-embeddings-on-python-314.md)) |
 | Hosting | A second tenant on the platform's single k3s node, inside a ResourceQuota of 1 GiB of memory limits and 1 CPU ([platform ADR 0025](https://github.com/Sandeep-RN/oci-k8s-gitops-demo/blob/main/docs/adr/0025-second-application-on-the-node-inside-a-hard-cap.md)). Designed; its verification issue, [demo #196](https://github.com/Sandeep-RN/oci-k8s-gitops-demo/issues/196), is still open |
-| Size of the work | On 2026-11-23: 21 merged pull requests in this repo (`gh pr list`), 3 app ADRs, 261 tests passing against a real Postgres with none skipped ([PR #51](https://github.com/Sandeep-RN/oncall-assistant/pull/51)) |
-| Cost | No infrastructure cost: it runs on the platform's existing free node and Groq's free tier (README, customer brief "Costs nothing to run") |
+| Size of the work | On 2026-11-26: 28 merged pull requests in this repo, 1 of them from Dependabot (`gh pr list --state merged`), 3 app ADRs, 266 tests passing against a real Postgres with none skipped ([CI run on `main` at d4a2bd9](https://github.com/Sandeep-RN/oncall-assistant/actions/runs/45233167820), 2026-11-23) |
+| Cost | No infrastructure cost: it runs on the platform's existing free node and Groq's free tier (README, customer brief "Costs nothing to run"). Stated 2026-11-23; no bill was checked since |
 | Built with | An AI coding assistant, Claude Code. See "How it was built" |
 
 **Tools, by layer** (use these exact names for skills and tags):
@@ -95,17 +124,25 @@ Every row has a source.
 
 | What was tested | Result | Source |
 |---|---|---|
-| Retrieval on the fixed question set | 25 of 28 answerable questions (89%) had the right passage in the top 5; target 90%. Same score and same three misses after the corpus pin moved | [PR #13](https://github.com/Sandeep-RN/oncall-assistant/pull/13), [PR #51](https://github.com/Sandeep-RN/oncall-assistant/pull/51) |
-| Can a similarity score decide "I don't know"? | No: best-passage scores were 0.62 to 0.85 for answerable questions and 0.62 to 0.78 for unanswerable ones; the ranges overlap | [ADR 0002](docs/adr/0002-cite-or-refuse-one-openai-compatible-call.md), [PR #13](https://github.com/Sandeep-RN/oncall-assistant/pull/13) |
+| Retrieval on the fixed question set, **pinned corpus** | 25 of 28 answerable questions (89%) had the right passage in the top 5; target 90%. Same score and same three misses after the corpus pin moved. Re-run 2026-11-26: 25 of 28, same misses (A01, A05, A08) | [PR #13](https://github.com/Sandeep-RN/oncall-assistant/pull/13), [PR #51](https://github.com/Sandeep-RN/oncall-assistant/pull/51), re-run below |
+| The same set on the docs at each repo's head, 2026-11-26 | 24 of 28 (86%): one more miss (A06, whose expected document is the platform's `PROJECT_BRIEF.md`; why it now misses was not looked into). One run, off the cluster. The live index follows the heads, so this is the nearer figure for what the live site read on that date; quote it only with the date and the same limits as the 89% | re-run below |
+| Can a similarity score decide "I don't know"? | No: best-passage scores were 0.62 to 0.85 for answerable questions and 0.62 to 0.78 for unanswerable ones; the ranges overlap (same ranges in both runs of 2026-11-26) | [ADR 0002](docs/adr/0002-cite-or-refuse-one-openai-compatible-call.md), [PR #13](https://github.com/Sandeep-RN/oncall-assistant/pull/13), re-run below |
 | Live smoke check of cited answers | Both providers, 5 eval questions: 3 answered with the expected document cited, 2 refused (10 of 10). Five questions are a smoke check, not a result | [PR #16](https://github.com/Sandeep-RN/oncall-assistant/pull/16) |
 | Cost of one answer | 2.0 to 2.5K prompt tokens and 25 to 240 completion tokens, so about 3 live answers a minute on Groq's 8K-tokens-a-minute free tier; generation 0.5 to 1.3 s, retrieval 0.1 to 0.2 s (5 questions) | [ADR 0002](docs/adr/0002-cite-or-refuse-one-openai-compatible-call.md) |
 | Indexing memory, container test on x86 | Before the batching fix: OOM-killed at a 384Mi limit, 435 MiB peak without a limit. After (fixed lengths plus a token budget): 247 MiB. Full index of 285 passages, laptop Docker | [ADR 0001](docs/adr/0001-local-onnx-embeddings-on-python-314.md), [#19](https://github.com/Sandeep-RN/oncall-assistant/issues/19) |
 | Memory on the arm64 node, one run | First index run on the node (286 passages, 7 min 4 s): index Job working set 271 MiB of 384 MiB, app pod 247 MiB of 320 MiB (not the x86 test's 247 MiB, which is the index Job), Postgres 34 MiB of 256 MiB; no restarts, no OOM kills | [demo #196](https://github.com/Sandeep-RN/oci-k8s-gitops-demo/issues/196#issuecomment-7076495326) (comment of 2026-11-22) |
 | Hard cap on the live node, single checks | A pod that would take memory limits over the 1 GiB quota was refused on a server-side dry run (128Mi refused with 960Mi in use; 64Mi passed). All four pods run at priority -100 and QoS Burstable | [demo #196](https://github.com/Sandeep-RN/oci-k8s-gitops-demo/issues/196#issuecomment-7076495326) (comment of 2026-11-22, items 1 to 3) |
-| Delivery path | The first real CI run pushed a tag-bump pull request into the gitops repo, which auto-merged (gitops #79); ArgoCD rolls each bump | [#7](https://github.com/Sandeep-RN/oncall-assistant/issues/7), [#32](https://github.com/Sandeep-RN/oncall-assistant/issues/32) |
+| Delivery path | The first CI run that tried to push failed on a read-only token; its re-run opened the tag-bump pull request in the gitops repo, which auto-merged ([gitops #79](https://github.com/Sandeep-RN/oci-k8s-gitops-demo-gitops/pull/79)). ArgoCD deploys each bump | [#32](https://github.com/Sandeep-RN/oncall-assistant/issues/32), gitops #79 |
 | Demo token revoke | A token added or revoked by a merge works with no restart, 1 to 5 minutes after the merge (ArgoCD sync, then the mount refresh in 3 to 16 s); a revoked token then got a 401. Four merges | [ADR 0003](docs/adr/0003-saved-answers-on-capacity-limits-and-a-daily-budget.md), [demo #218](https://github.com/Sandeep-RN/oci-k8s-gitops-demo/issues/218) |
 | Least-privilege database role | The app role can write one table only, and only inside an explicit read-write transaction; a CI step tries the permissions on a real Postgres (26 checks) | [demo #207](https://github.com/Sandeep-RN/oci-k8s-gitops-demo/issues/207), [#33](https://github.com/Sandeep-RN/oncall-assistant/issues/33) |
 | Saved answers reviewed by a person | Of 5 model-drafted saved answers, 2 had a sentence their own valid citation did not support; both were trimmed by hand | [ADR 0003](docs/adr/0003-saved-answers-on-capacity-limits-and-a-daily-budget.md), [#40](https://github.com/Sandeep-RN/oncall-assistant/issues/40) |
+
+"Re-run below" is a check of 2026-11-26 on a laptop (`python:3.14-slim`
+container, x86): the repo's own corpus, embedding and scoring code, with the
+exact cosine search done in memory instead of in pgvector (the app's search is
+also an exact scan). It reproduced the pinned result of PR #51. No model was
+called. It has no pull request or CI run behind it; to repeat it in the repo's
+own way, index a corpus and run `python -m app.evals` (README, "Evals").
 
 How to quote these honestly:
 
@@ -117,7 +154,11 @@ How to quote these honestly:
   easier than real on-call questions, and 89% is below the 90% target. Say:
   "89% top-5 retrieval (25 of 28) on a first, AI-drafted 39-question set,
   below its 90% target". Never "89% accuracy", never "89% of answers are
-  correct", and never drop "below its 90% target".
+  correct", and never drop "below its 90% target". The 89% belongs to the
+  pinned corpus: never present it as the score of today's live index.
+- **Document and passage counts are the pinned corpus's.** Say "pinned", or use
+  the dated head counts. Never present 50 and 297 as the size of the live
+  index.
 - **Answer quality is not measured.** Whether each claim is supported by its
   citation is the M2 answer eval. The 10 of 10 is a five-question smoke check.
 - **Keep the memory numbers apart.** There are two different "247 MiB"
@@ -136,6 +177,10 @@ How to quote these honestly:
   add them up into "ADR 0025 verified" or "the cap is proven".
 - **Image size is not quoted.** Leave it out of the brief and everything
   written from it.
+- **Trivy scans the amd64 build.** CI scans a local amd64 image before anything
+  is pushed, then builds and pushes amd64 and arm64 (`.github/workflows/ci.yml`).
+  The arm64 image the node runs is not scanned itself. Never write "an arm64
+  image scanned by Trivy".
 - **The model is gpt-oss-120b on Groq's free tier** in the cluster. Do not
   name any other provider or model for the live site.
 - **There is no SLO, dashboard or alert yet.** The 99% availability and 8 s
@@ -165,7 +210,7 @@ Each one happened. The `post-idea` issue has the detail.
 | The index Job was OOM-killed at 384Mi ([#19](https://github.com/Sandeep-RN/oncall-assistant/issues/19)) | Padding each batch to its longest text gave ONNX Runtime a new input shape almost every batch | Fixed input lengths plus a token budget: 247 MiB in the same x86 container test |
 | No similarity threshold could decide "I don't know" ([#20](https://github.com/Sandeep-RN/oncall-assistant/issues/20)) | The score ranges overlap | The model cites or refuses; the app checks the citations |
 | pgvector needs a superuser, and a superuser can run shell commands ([#21](https://github.com/Sandeep-RN/oncall-assistant/issues/21)) | pgvector is not a trusted extension | Three roles: admin creates the extension, the indexer is not a superuser, the app is read-only |
-| The repo could not use Python 3.15 ([#22](https://github.com/Sandeep-RN/oncall-assistant/issues/22)) | ONNX Runtime had no 3.15 wheels | Python 3.14, moved on purpose later |
+| The repo could not use Python 3.15 ([#22](https://github.com/Sandeep-RN/oncall-assistant/issues/22)) | ONNX Runtime had no 3.15 wheels | Python 3.14, moved on purpose later. Dependabot's [PR #61](https://github.com/Sandeep-RN/oncall-assistant/pull/61) to 3.15 is the signal: on 2026-11-26 it was open with a failing image build ([#65](https://github.com/Sandeep-RN/oncall-assistant/issues/65)) |
 | Two correct answers became refusals ([#23](https://github.com/Sandeep-RN/oncall-assistant/issues/23)) | The model cited with fullwidth brackets, which the parser did not read | The parser accepts both styles; the two real replies are tests |
 | The first real question got a 500 ([#24](https://github.com/Sandeep-RN/oncall-assistant/issues/24), [#18](https://github.com/Sandeep-RN/oncall-assistant/issues/18)) | A database error from the search was not caught | A clean 503 `index_unavailable` |
 | A down database still made visitors wait before the 503 ([#31](https://github.com/Sandeep-RN/oncall-assistant/issues/31)) | The connection pool had no timeout | A 3 s pool timeout (`app/main.py`) |
@@ -228,8 +273,8 @@ Pick three to five. Do not merge two bullets into one bigger claim.
   decision records with cited answers, or says "I don't know" when no valid
   citation backs the answer.
 - Delivered it through the platform's GitOps repo like any other service: a
-  multi-arch (arm64) image scanned by Trivy before push, published to GHCR,
-  and a tag-bump pull request that ArgoCD deploys.
+  Trivy gate before anything is pushed, a multi-arch (amd64 and arm64) image on
+  GHCR, and a tag-bump pull request that ArgoCD deploys.
 - Fixed an out-of-memory kill in the embedding job by changing the batching to
   a few fixed input shapes with a token budget: in an x86 container test,
   peak memory fell from 435 MiB (OOM-killed at a 384Mi limit) to 247 MiB.
@@ -243,7 +288,7 @@ Pick three to five. Do not merge two bullets into one bigger claim.
 
 ```yaml
 title: "On-call Assistant: Cited Answers over Runbooks (RAG)"
-description: "A personal project: an assistant that answers on-call questions from a real platform's runbooks and decision records with cited answers or 'I don't know', running on that platform's free Kubernetes node inside a hard 1 GiB cap, delivered by GitOps."
+description: "A personal project: an assistant that answers on-call questions from a real platform's runbooks and decision records with cited answers or 'I don't know', designed to run on that platform's free Kubernetes node inside a hard 1 GiB cap, delivered by GitOps."
 tags: ["RAG", "Python", "FastAPI", "pgvector", "ONNX Runtime", "LLM", "Kubernetes", "ArgoCD", "GitHub Actions"]
 status: "in progress"   # M1 done 2026-11-23; M2 to M4 open
 date: "2026-11"
@@ -256,8 +301,8 @@ live: "https://ask.sandeeprn.in"
 **Two sentences.** I built an on-call assistant that answers questions about
 my Kubernetes platform's runbooks and decision records, citing the exact
 section or saying "I don't know". It runs for free on that platform's own
-node, inside a hard memory cap, and ships through the same GitOps pipeline as
-the platform's service.
+node, is designed to stay inside a hard memory cap, and ships through the same
+GitOps pipeline as the platform's service.
 
 **Profile line.** On-call RAG assistant: cited answers or "I don't know" over
 real runbooks, on a free k3s node via ArgoCD. Live at ask.sandeeprn.in.
@@ -268,9 +313,9 @@ assistant answers on-call questions from the public docs of my Kubernetes
 platform. A local embedding model on ONNX Runtime and pgvector find the top
 five passages, gpt-oss-120b on Groq's free tier writes a short answer, and the
 app turns any answer without a valid citation into "I don't know". It ships
-as an arm64 image through Trivy, GHCR and a tag-bump pull request to ArgoCD,
-and shares one free node with a live site inside a 1 GiB cap. Evals and SLOs
-are the next milestone.
+through a Trivy gate, GHCR and a tag-bump pull request to ArgoCD, and shares one
+free node with a live site, designed to stay inside a 1 GiB cap. The answer eval
+and SLOs are the next milestone.
 
 ### Diagram in plain ASCII
 
@@ -285,7 +330,7 @@ are the next milestone.
                        nightly index CronJob ----+---- public docs of the
                                                        three platform repos
 
-  merge --> GitHub Actions (test, build arm64, Trivy) --> GHCR
+  merge --> GitHub Actions (test, Trivy on amd64, build amd64 + arm64) --> GHCR
                  |
                  +--> tag-bump PR in the gitops repo --> ArgoCD --> the node
 ```
@@ -293,6 +338,7 @@ are the next milestone.
 ## Links
 
 - Live: <https://ask.sandeeprn.in>
+- The platform it runs on and answers about: <https://demo.sandeeprn.in> (linked both ways)
 - Start here: [README](README.md), then the [customer brief](docs/customer-brief.md)
 - Decisions: [docs/adr/README.md](docs/adr/README.md) and platform
   [ADR 0025](https://github.com/Sandeep-RN/oci-k8s-gitops-demo/blob/main/docs/adr/0025-second-application-on-the-node-inside-a-hard-cap.md)
@@ -306,7 +352,7 @@ Update this file, then everything written from it, when these close:
 
 | When | Change |
 |---|---|
-| Demo #196 closes (7-day item, about 2026-11-29) | "Facts" Hosting and "Decisions": ADR 0025 may be called verified, with the results posted there. Remove its line from "Not done" and the "designed, not verified" quoting rule |
-| M2 Evals and SLOs closes (due 2026-12-23) | "Results": the grown eval set's retrieval score and the answer eval; the 7-day availability and latency figures as measured. Rewrite the 89% quoting rule for the new set. A bullet for the CI eval gate, SLOs and alerts may be added. Remove M2 from "Not done" |
+| Demo #196 closes (7-day item, about 2026-11-29) | "Facts" Hosting and "Decisions": ADR 0025 may be called verified, with the results posted there. Remove its line from "Not done" and the "designed, not verified" quoting rule, and review the "designed to" wording in "Summary" and "Ready to use" |
+| M2 Evals and SLOs closes (target 2026-12-23; GitHub shows 12-22) | "Results": the grown eval set's retrieval score and the answer eval; the 7-day availability and latency figures as measured. Rewrite the 89% quoting rule for the new set. A bullet for the CI eval gate, SLOs and alerts may be added. Remove M2 from "Not done" |
 | [M3 Agent](https://github.com/Sandeep-RN/oncall-assistant/milestone/3) closes (target 2027-01-06) | "Facts" and a bullet for the read-only live-state tools and the egress NetworkPolicy. Remove M3 from "Not done" |
 | [M4 Reliability and handover](https://github.com/Sandeep-RN/oncall-assistant/milestone/4) closes (about 2027-01-20) | Links to the demo video and the write-up; the portfolio card's `status` becomes `"done"` |
