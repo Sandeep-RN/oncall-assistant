@@ -20,14 +20,15 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
 WORKDIR /srv
 
 # Pull in Debian security fixes the base image has not caught up with yet (Trivy
-# gate). Same workaround as the link shortener's image (demo #112, #187): zlib1g
-# HIGH CVEs with a fix available. Scoped to one package so builds stay
-# predictable. Delete this layer once Trivy passes without it: retest by
-# removing it and building. Re-tested 2026-11-22 on this digest (Debian 13.7):
-# still needed, Trivy fails on zlib1g CVE-2026-85091 without it. Runs as root,
-# before USER, and leaves no apt lists.
+# gate), as in the link shortener's image (demo #112, #187, #266). Scoped to the
+# named packages so builds stay predictable. Delete a package once Trivy passes
+# without it: retest by removing it and building. Re-tested 2026-11-26 on this
+# digest, both still needed:
+#   libzstd1  CVE-2026-124851 (HIGH), fixed in 1.5.7+dfsg-1+deb13u1
+#   zlib1g    CVE-2026-85091 (HIGH), fixed in 1:1.3.dfsg+really1.3.1-1+deb13u1
+# Runs as root, before USER, and leaves no apt lists.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends --only-upgrade zlib1g \
+    && apt-get install -y --no-install-recommends --only-upgrade libzstd1 zlib1g \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
