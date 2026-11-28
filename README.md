@@ -90,13 +90,16 @@ expected source is wrong, with the reason in the pull request. Three labels were
 first run (A09, A13, A24) once the other passages were checked to hold the answer too.
 
 This scores retrieval only, with no model calls and no cost: for each answerable question, is a
-passage from the right document and section among the top 5? It also prints the best-passage score
+passage from the right document and section among the passages the model would get? That is the
+top 5, plus up to 3 more sections when 4 of the 5 share a document
+([ADR 0004](docs/adr/0004-same-document-expansion-of-retrieved-passages.md)); `--no-same-document`
+scores the plain top 5. It also prints the best-passage score
 of every question, because a refusal threshold has to be chosen from those ranges. Needs the index
 (`python -m app.index`).
 
 ## Ask
 
-`POST /ask` with `{"question": "..."}` (3 to 500 characters) answers from the top 5 passages,
+`POST /ask` with `{"question": "..."}` (3 to 500 characters) answers from the top 5 passages (up to 8, ADR 0004),
 citing them as `[n]`, or says "I don't know" ([ADR 0002](docs/adr/0002-cite-or-refuse-one-openai-compatible-call.md)):
 
 | Response | Meaning |

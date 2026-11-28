@@ -1,7 +1,8 @@
 # 0002. Answers cite or refuse, through one OpenAI-compatible call
 
 Status: Accepted (2026-11-22). Partly replaced by [ADR 0003](0003-saved-answers-on-capacity-limits-and-a-daily-budget.md):
-a 429 or a busy server now answers 200 with a saved answer; the other failures stay 503.
+a 429 or a busy server now answers 200 with a saved answer; the other failures stay 503. Amended by
+[ADR 0004](0004-same-document-expansion-of-retrieved-passages.md): up to 3 more passages of the same document.
 
 ## Context
 The customer brief asks for short answers that cite the exact document and section, and for

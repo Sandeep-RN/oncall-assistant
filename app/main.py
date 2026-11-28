@@ -103,6 +103,16 @@ def pool_search(pool) -> Search:
     return search_pool
 
 
+SAME_DOCUMENT_FLAG = "RETRIEVE_SAME_DOCUMENT"
+
+
+def same_document_setting() -> bool:
+    """The same-document rule (ADR 0004) is on unless RETRIEVE_SAME_DOCUMENT=off: a kill switch
+    that needs only a Deployment env change, no new image. Only "off" (any case) turns it off;
+    anything else keeps the measured default, so a typo cannot change behaviour silently."""
+    return os.environ.get(SAME_DOCUMENT_FLAG, "").strip().lower() != "off"
+
+
 def build_answerer() -> tuple[Answerer, object]:
     """The real wiring: local model, a small Postgres pool, the configured provider."""
     import httpx
@@ -127,13 +137,15 @@ def build_answerer() -> tuple[Answerer, object]:
         model=settings.model,
         saved=SAVED,
         budget=Budget(PgLedger(pool), budget_settings),
+        same_document=same_document_setting(),
     )
     log.info(
-        "answerer ready: provider=%s model=%s budget=%d tokens/day, public %d%%",
+        "answerer ready: provider=%s model=%s budget=%d tokens/day, public %d%% same_document=%s",
         settings.provider,
         settings.model,
         budget_settings.total,
         budget_settings.public_pct,
+        "on" if answerer.same_document else "off",
     )
     return answerer, (pool, http)
 

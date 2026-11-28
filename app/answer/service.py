@@ -20,6 +20,7 @@ from app.answer.llm import Completion, LLMError
 from app.answer.prompt import build_messages, parse_answer
 from app.budget.budget import PUBLIC, Budget
 from app.embed.model import Embedder
+from app.index.select import CANDIDATES, same_document
 from app.index.store import Hit
 from app.saved.store import SavedAnswers
 
@@ -106,8 +107,12 @@ class Answerer:
         max_concurrent: int = 2,
         saved: SavedAnswers | None = None,
         budget: Budget | None = None,
+        same_document: bool = False,
     ):
         self.embedder, self.search, self.llm, self.model, self.k = embedder, search, llm, model, k
+        # ADR 0004: when most of the top k share a document, add more of its sections. Off by
+        # default here so a bare Answerer behaves as before; the app turns it on (app/main.py).
+        self.same_document = same_document
         # Without saved answers a capacity limit is a plain 503, as in ADR 0002.
         self.saved = saved
         # Without a budget every question is answered until the provider says no.
@@ -184,7 +189,10 @@ class Answerer:
         t0 = time.perf_counter()
         vector = self.embedder.embed_query(question)
         try:
-            hits = list(self.search(vector, self.k))
+            if self.same_document:
+                hits = same_document(self.search(vector, CANDIDATES), k=self.k)
+            else:
+                hits = list(self.search(vector, self.k))
         except psycopg.Error as e:
             # An empty database before the first index run (UndefinedTable) or a Postgres outage
             # (OperationalError, incl. a pool timeout). Log the error class only: no traceback

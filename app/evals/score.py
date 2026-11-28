@@ -45,6 +45,8 @@ class Result:
 class Report:
     results: tuple[Result, ...]
     k: int
+    # Passages added by the same-document rule (ADR 0004), counted after the top k.
+    extra: int = 0
 
     @property
     def answerable(self) -> int:
@@ -60,10 +62,13 @@ class Report:
         return self.found / self.answerable if self.answerable else None
 
 
-def evaluate(questions: Sequence[Question], search: Search, *, k: int = 5) -> Report:
+def evaluate(
+    questions: Sequence[Question], search: Search, *, k: int = 5, extra: int = 0
+) -> Report:
+    """`search` returns the passages the model would read; at most k + extra of them count."""
     results = []
     for q in questions:
-        hits = list(search(q.question))[:k]
+        hits = list(search(q.question))[: k + extra]
         rank = None
         if q.kind == "answerable":
             rank = next((i for i, h in enumerate(hits, 1) if is_hit(h, q.sources)), None)
@@ -78,4 +83,4 @@ def evaluate(questions: Sequence[Question], search: Search, *, k: int = 5) -> Re
                 top.path if top else None,
             )
         )
-    return Report(tuple(results), k)
+    return Report(tuple(results), k, extra)
