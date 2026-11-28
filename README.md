@@ -118,7 +118,11 @@ outside the page's CSP).
 
 ## Daily budget and demo tokens
 
-The provider's free tier allows about 200K tokens a day for everyone together, so the assistant
+Groq's free tier for `openai/gpt-oss-120b` allows, for everyone together (read in the Groq console
+on 2026-11-28): 30 requests a minute, 1K requests a day, **8K tokens a minute** and 200K tokens a
+day. An answer takes about 2 to 3K tokens, so the per-minute token limit is the first one reached:
+about 3 answers a minute, 2 when the same-document rule adds passages (ADR 0004). A 429 from it
+gives the saved answers. For the daily limit the assistant
 counts tokens (not calls) in Postgres, in one small table, `llm_usage` ([ADR 0003](docs/adr/0003-saved-answers-on-capacity-limits-and-a-daily-budget.md)).
 Visitors may use `PUBLIC_SHARE_PCT` (70%) of `DAILY_TOKENS_TOTAL`; when it is spent they get the
 saved answers, and the check comes before the embedding, so a spent budget costs nothing. A **demo
