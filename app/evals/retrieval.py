@@ -18,6 +18,7 @@ import psycopg
 from app.embed.model import DEFAULT_DIR, OnnxEmbedder
 from app.evals.questions import QuestionError, load_questions
 from app.evals.score import Report, evaluate
+from app.index.select import CANDIDATES, EXTRA, same_document
 from app.index.store import connect, search
 
 
@@ -39,9 +40,11 @@ def render(report: Report) -> str:
     unanswerable = [r.top_score for r in report.results if r.kind == "unanswerable"]
     lines.append("")
     if report.recall is not None:
+        where = f"the top {report.k}"
+        if report.extra:
+            where += f" plus up to {report.extra} same-document sections"
         lines.append(
-            f"right passage in the top {report.k}: {report.found}/{report.answerable} "
-            f"= {report.recall:.0%}"
+            f"right passage in {where}: {report.found}/{report.answerable} = {report.recall:.0%}"
         )
         lowest = min((s for s in answerable if s is not None), default=None)
         lines.append(f"  best-passage score on answerable questions: lowest {_score(lowest)}")
@@ -61,14 +64,29 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("-k", type=int, default=5)
     ap.add_argument("--min-recall", type=float, help="exit 1 if recall is below this (0 to 1)")
     ap.add_argument("--model-dir", type=Path, default=DEFAULT_DIR)
+    ap.add_argument(
+        "--no-same-document",
+        action="store_true",
+        help="score the plain top k, without the same-document rule the app uses (ADR 0004)",
+    )
     args = ap.parse_args(argv)
     try:
         questions = load_questions(args.file)
         embedder = OnnxEmbedder(args.model_dir)
         with connect() as conn:
-            report = evaluate(
-                questions, lambda q: search(conn, embedder.embed_query(q), k=args.k), k=args.k
-            )
+            if args.no_same_document:
+                report = evaluate(
+                    questions, lambda q: search(conn, embedder.embed_query(q), k=args.k), k=args.k
+                )
+            else:  # what the app does: the same function, the same candidates
+                report = evaluate(
+                    questions,
+                    lambda q: same_document(
+                        search(conn, embedder.embed_query(q), k=CANDIDATES), k=args.k
+                    ),
+                    k=args.k,
+                    extra=EXTRA,
+                )
     except (QuestionError, FileNotFoundError, psycopg.Error) as e:
         print(f"error: {e}", file=sys.stderr)
         return 2

@@ -10,7 +10,8 @@ from dataclasses import dataclass, field
 from app.answer.text import clean
 from app.index.store import Hit
 
-# Bounds one request at about 5 x 450 words plus the rules: roughly 2.5 to 4K tokens.
+# Bounds one request at about 8 x 450 words plus the rules (5 passages, plus up to 3 more of the
+# same document, ADR 0004). Measured requests were 2.0 to 2.5K tokens with 5 passages.
 MAX_PASSAGE_WORDS = 450
 REFUSAL = "I don't know."
 
